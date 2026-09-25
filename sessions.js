@@ -212,7 +212,7 @@ async function trackedTranscript(id, profile) {
 
 // Read a profile's default model role, e.g. "ollama-cloud/glm-5.3-flash:high",
 // straight from native OMP's config.yml on every call. Native OMP rewrites that
-// file whenever a role changes (`/model`, `/settings`, a harness install), so
+// file whenever a role changes (`/model`, `/settings`, a config installer), so
 // any stored copy goes stale; a process-lifetime cache once made Reload profile
 // relaunch sessions on the model the profile had when the server started. The
 // read+parse costs ~10 µs, negligible even on the fastest chat-poll cadence.
