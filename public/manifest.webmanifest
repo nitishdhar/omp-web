@@ -1,0 +1,13 @@
+{
+  "name": "omp-web",
+  "short_name": "omp-web",
+  "description": "Web console for native omp sessions, managed by folder and profile.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0f1113",
+  "theme_color": "#0f1113",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
