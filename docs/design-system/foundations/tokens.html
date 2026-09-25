@@ -1,0 +1,142 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Color and surface tokens</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.sw-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:10px}
+.sw{display:flex;gap:11px;align-items:flex-start;padding:10px;border:1px solid var(--line);
+  border-radius:8px;background:var(--panel-2)}
+.sw-chip{flex:none;width:34px;height:34px;border-radius:7px;border:1px solid var(--line)}
+.sw-meta{min-width:0;display:flex;flex-direction:column;gap:2px}
+.sw-name{font:600 11.5px var(--font-mono);color:var(--text)}
+.sw-val{font:10.5px var(--font-mono);color:var(--faint)}
+.sw-use{font-size:11px;color:var(--muted);line-height:1.4}
+.radius-row{display:flex;gap:14px;flex-wrap:wrap}
+.radius{display:flex;flex-direction:column;gap:6px;align-items:center}
+.radius span{font:10.5px var(--font-mono);color:var(--faint)}
+.radius i{display:block;width:72px;height:46px;background:var(--panel-2);border:1px solid var(--line)}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">Quiet console</span>
+    <h1>Color and surface tokens</h1>
+    <p>Every value lives in base.css :root. Dark and light ship from the same token contract; the terminal stays dark because it renders another program's ANSI output.</p>
+  </header>
+
+  <section class="ds-block">
+    <span class="ds-label">Surfaces - elevation is a lightness delta, never a new hue</span>
+    <div class="sw-grid"><div class="sw"><span class="sw-chip" style="background:#0f1113"></span><span class="sw-meta"><span class="sw-name">--bg</span><span class="sw-val">#0f1113</span><span class="sw-use">App ground. Terminal host, chat log, input fills.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#15181b"></span><span class="sw-meta"><span class="sw-name">--panel</span><span class="sw-val">#15181b</span><span class="sw-use">Sidebar, composer, modal card, cards on ground.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#1c2025"></span><span class="sw-meta"><span class="sw-name">--panel-2</span><span class="sw-val">#1c2025</span><span class="sw-use">Inset fields, search input, tool change rows.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#232830"></span><span class="sw-meta"><span class="sw-name">--panel-3</span><span class="sw-val">#232830</span><span class="sw-use">Hover on popover items and row menus only.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#171a1e"></span><span class="sw-meta"><span class="sw-name">--pop-bg</span><span class="sw-val">#171a1e</span><span class="sw-use">Floating layer: popovers, row menus, workflow detail.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#20252b"></span><span class="sw-meta"><span class="sw-name">--bubble-user</span><span class="sw-val">#20252b</span><span class="sw-use">User turn bubble. Neutral on purpose - blue made every turn shout.</span></span></div></div>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Ink and hairlines</span>
+    <div class="sw-grid"><div class="sw"><span class="sw-chip" style="background:#e4e7ea"></span><span class="sw-meta"><span class="sw-name">--text</span><span class="sw-val">#e4e7ea</span><span class="sw-use">Primary reading ink and session titles.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#9aa0a8"></span><span class="sw-meta"><span class="sw-name">--muted</span><span class="sw-val">#9aa0a8</span><span class="sw-use">Secondary metadata, labels, assistant chrome.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#6b7178"></span><span class="sw-meta"><span class="sw-name">--faint</span><span class="sw-val">#6b7178</span><span class="sw-use">Tertiary: runtime rail, folder paths, timestamps.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:rgba(255,255,255,.08)"></span><span class="sw-meta"><span class="sw-name">--line</span><span class="sw-val">rgba(255,255,255,.08)</span><span class="sw-use">The only resting border. Hairline, never a frame.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:rgba(255,255,255,.14)"></span><span class="sw-meta"><span class="sw-name">--line-strong</span><span class="sw-val">rgba(255,255,255,.14)</span><span class="sw-use">Hover and focus borders exclusively.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:rgba(255,255,255,.045)"></span><span class="sw-meta"><span class="sw-name">--row-hover</span><span class="sw-val">rgba(255,255,255,.045)</span><span class="sw-use">Neutral row hover. Never the accent.</span></span></div></div>
+    <p class="ds-note">Controls carry no border at rest. Ghost buttons, rows and selects reveal
+      <code>--line-strong</code> on hover or focus. A resting 1px outline on every control is what
+      made the pre-reset build read as a generic dev tool.</p>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Chroma is reserved for meaning</span>
+    <div class="sw-grid"><div class="sw"><span class="sw-chip" style="background:#5b8dee"></span><span class="sw-meta"><span class="sw-name">--accent</span><span class="sw-val">#5b8dee</span><span class="sw-use">Affordance, focus ring, selected rail, done state.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#3f6fd1"></span><span class="sw-meta"><span class="sw-name">--accent-2</span><span class="sw-val">#3f6fd1</span><span class="sw-use">Primary button fill only.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#3fb87a"></span><span class="sw-meta"><span class="sw-name">--ok</span><span class="sw-val">#3fb87a</span><span class="sw-use">Working / running. Pulsing dot.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#e0a53e"></span><span class="sw-meta"><span class="sw-name">--warn</span><span class="sw-val">#e0a53e</span><span class="sw-use">Waiting - the one state allowed a text pill.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#f0606a"></span><span class="sw-meta"><span class="sw-name">--danger</span><span class="sw-val">#f0606a</span><span class="sw-use">Errors, kill, failed tool calls.</span></span></div>
+<div class="sw"><span class="sw-chip" style="background:#9b8fe8"></span><span class="sw-meta"><span class="sw-name">--shell</span><span class="sw-val">#9b8fe8</span><span class="sw-use">Pane returned to a login shell; OMP is not running.</span></span></div></div>
+    <p class="ds-note">Six hues, six meanings, no decoration. Selected rows get a 2px accent rail
+      plus <code>--panel</code>, not a blue wash, so hover and selection stop competing.</p>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Radius scale</span>
+    <div class="radius-row">
+      <span class="radius"><i style="border-radius:6px"></i><span>6px controls</span></span>
+      <span class="radius"><i style="border-radius:7px"></i><span>7px tool cards</span></span>
+      <span class="radius"><i style="border-radius:8px"></i><span>8px popovers, inputs</span></span>
+      <span class="radius"><i style="border-radius:12px"></i><span>12px bubbles, modals</span></span>
+      <span class="radius"><i style="border-radius:999px;width:46px"></i><span>999px pills</span></span>
+    </div>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Typeface</span>
+    <p class="ds-note">Inter Variable for UI and JetBrains Mono Variable for
+      code and paths, self-hosted as latin subsets (48KB + 40KB, both OFL) in
+      <code>public/vendor/fonts/</code>. Self-hosted rather than CDN so the
+      console keeps working offline and over a VPN with no third-party
+      request. <code>cv05</code> is enabled to give <code>l</code> a tail:
+      l/1/I have to separate at 11px in an app full of paths and flags.
+      These preview cards use the same UI and monospace stacks as the shipped app.</p>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Light theme</span>
+    <p class="ds-note">Shipped as a single <code>:root[data-theme="light"]</code>
+      token block with a toggle and an inline pre-paint script. The terminal
+      stays dark in both themes &mdash; it is a device showing another
+      program&rsquo;s ANSI output, and omp&rsquo;s palette is tuned for a dark
+      ground.</p>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Motion and depth</span>
+    <p class="ds-note">One shadow: <code>0 8px 24px rgba(0,0,0,.36)</code>, on popovers and modals only.
+      No gradients. The sidebar's staggered row entrance is the single entrance animation in the app and
+      is scoped to first paint - an unscoped rule replays on every status change and reads as flicker.
+      <code>prefers-reduced-motion</code> disables all of it globally.</p>
+  </section>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,126 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Typography</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.ty{display:flex;flex-direction:column;gap:12px}
+.ty-row{display:grid;grid-template-columns:218px minmax(0,1fr);align-items:baseline;gap:18px;
+  padding-bottom:12px;border-bottom:1px solid var(--line)}
+.ty-row:last-child{border-bottom:0;padding-bottom:0}
+.ty-spec{color:var(--faint);font:10.5px/1.5 var(--font-mono)}
+.ty-sample{min-width:0}
+.s-display{font-size:26px;font-weight:600;line-height:1.2;letter-spacing:-.03em}
+.s-page{font-size:19px;font-weight:650;line-height:1.3;letter-spacing:-.025em}
+.s-h2{font-size:17px;font-weight:650;line-height:1.35;letter-spacing:-.018em}
+.s-h3{font-size:15.5px;font-weight:640;line-height:1.35;letter-spacing:-.014em}
+.s-prose{font-size:14.5px;font-weight:400;line-height:1.7}
+.s-input{font-size:14px;font-weight:400;line-height:1.6}
+.s-control{font-size:12.5px;font-weight:520;line-height:1.4}
+.s-label{color:var(--muted);font-size:11px;font-weight:650;line-height:1.35}
+.s-meta{color:var(--faint);font-size:11px;font-weight:400;line-height:1.4}
+.s-mono{color:var(--muted);font:11px/1.4 var(--font-mono)}
+.s-terminal{color:var(--text);font:12px/1.65 var(--font-mono)}
+.measure{width:min(100%,760px);padding:16px;border:1px dashed var(--line-strong);border-radius:8px}
+@media(max-width:560px){.ty-row{grid-template-columns:1fr;gap:4px}.s-display{font-size:22px}}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">Dense, calm, typographic</span>
+    <h1>Typography</h1>
+    <p>This is an operator console, not a chat app. Information density is a feature; chrome is not.</p>
+  </header>
+
+  <section class="ds-block">
+    <span class="ds-label">Inter Variable — role scale</span>
+    <div class="ty">
+      <div class="ty-row"><span class="ty-spec">26px / 1.2 / 600 / −.03em<br>empty-state display</span>
+        <span class="ty-sample s-display">Start an OMP session</span></div>
+      <div class="ty-row"><span class="ty-spec">19px / 1.3 / 650 / −.025em<br>page and modal title</span>
+        <span class="ty-sample s-page">Reload under another profile</span></div>
+      <div class="ty-row"><span class="ty-spec">17px / 1.35 / 650 / −.018em<br>assistant heading 2</span>
+        <span class="ty-sample s-h2">Verification surface</span></div>
+      <div class="ty-row"><span class="ty-spec">15.5px / 1.35 / 640 / −.014em<br>assistant heading 3</span>
+        <span class="ty-sample s-h3">Changed behavior</span></div>
+      <div class="ty-row"><span class="ty-spec">14.5px / 1.7 / 400<br>assistant prose</span>
+        <span class="ty-sample s-prose">The reader mirrors the append-only contract and treats a rewrite as a reset.</span></div>
+      <div class="ty-row"><span class="ty-spec">14px / 1.6 / 400<br>composer and user bubble</span>
+        <span class="ty-sample s-input">Reload this session under the claude profile and keep the transcript.</span></div>
+      <div class="ty-row"><span class="ty-spec">12.5px / 1.4 / 520<br>session title and ordinary control</span>
+        <span class="ty-sample s-control">Restore origin history</span></div>
+      <div class="ty-row"><span class="ty-spec">11px / 1.35 / 650<br>label and state chrome</span>
+        <span class="ty-sample s-label">Needs you</span></div>
+      <div class="ty-row"><span class="ty-spec">11px / 1.4 / 400<br>runtime rail and row metadata</span>
+        <span class="ty-sample s-meta">omp-web · claude · 2m ago</span></div>
+      <div class="ty-row"><span class="ty-spec">11px / 1.4 / 400<br>structured value, path and chip</span>
+        <span class="ty-sample s-mono">~/workspace/omp-web · opus-5[1m]</span></div>
+      <div class="ty-row"><span class="ty-spec">12px / 1.65 / 400<br>terminal reading</span>
+        <span class="ty-sample s-terminal">git status --short</span></div>
+    </div>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Measure</span>
+    <div class="measure">
+      <p class="s-prose" style="margin:0">Conversation and composer share one centered axis at
+      <code class="ds-mono">--reading-width: 760px</code>. Tool cards, receipts, notices and the
+      workflow strip all snap to the same column, so the eye never re-finds the left edge.</p>
+    </div>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Rules</span>
+    <p class="ds-note"><span class="ds-do">Do</span> use the shipped Inter Variable face for every UI
+      role and JetBrains Mono Variable only where values need stable character shapes. The scale becomes
+      16px for editable controls on compact screens; it does not create a mobile typeface.</p>
+    <p class="ds-note"><span class="ds-dont">Don't</span> add a display face, a second UI stack, or a
+      second mono. Hierarchy comes from the documented size, line-height, weight and color roles—not a
+      decorative font.</p>
+  </section>
+
+</div>
+</body>
+</html>

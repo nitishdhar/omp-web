@@ -1,0 +1,170 @@
+<!-- @dsCard group="Audit" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live app audit</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.f{display:grid;grid-template-columns:auto 1fr;gap:0 14px;padding:14px 0;
+  border-bottom:1px solid var(--line)}
+.f:last-child{border-bottom:0}
+.sev{grid-row:span 2;align-self:start;min-width:62px;padding:3px 8px;border-radius:999px;
+  font:700 9.5px var(--font-ui);text-align:center;letter-spacing:.03em}
+.sev.crit{background:color-mix(in srgb,var(--danger) 18%,transparent);color:var(--danger)}
+.sev.high{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.sev.med{background:var(--row-hover);color:var(--muted)}
+.f h3{margin:0 0 5px;font-size:13.5px;font-weight:620;line-height:1.35}
+.f p{margin:0 0 6px;color:var(--muted);font-size:12.5px;line-height:1.6;max-width:74ch}
+.f p:last-child{margin-bottom:0}
+.f .ev{color:var(--faint);font-size:11.5px}
+.f .ev b{color:var(--muted);font-weight:600}
+.f code{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.verdict{padding:18px;border:1px solid color-mix(in srgb,var(--danger) 34%,var(--line));
+  border-left:3px solid var(--danger);border-radius:10px;
+  background:color-mix(in srgb,var(--danger) 6%,var(--panel))}
+.verdict p{margin:0 0 9px;font-size:14px;line-height:1.65}
+.verdict p:last-child{margin-bottom:0}
+.verdict b{font-weight:650}
+.meta{display:flex;gap:18px;flex-wrap:wrap;color:var(--faint);font:11px var(--font-mono)}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">Evidence, 2026-09-20</span>
+    <h1>Live app audit</h1>
+    <p>Thirteen findings from driving the running service at two widths, ranked by severity. Captured against the shipped build, not the design cards.</p>
+  </header>
+
+  <section class="verdict">
+    <p><b>The headline:</b> chat mode is currently a downgrade from the terminal it projects. It
+    drops list nesting, heading hierarchy, spend and branch state, then adds chrome the terminal
+    does not need. Everything else in this list is ordinary craft debt; that one is a credibility
+    problem for the whole chat-first bet.</p>
+    <p>None of it requires restructuring. Turn structure, prose rendering, the runtime rail, the
+    empty state and the mobile drawer are all fixable inside today's shape.</p>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Audit conditions</span>
+    <div class="meta"><span>live service 127.0.0.1:7799</span><span>1280&times;900 &middot; 390&times;844</span>
+      <span>authenticated</span><span>49 folders &middot; 37 sessions</span><span>2026-09-20</span></div>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Findings - chat mode</span>
+    <div class="f"><span class="sev crit">CRITICAL</span>
+    <div><h3>Chat mode loses information the terminal preserves</h3><p>The same assistant message was captured in both modes. Terminal keeps nested list indentation, colour-coded headings, and unboxed inline code. Chat flattens the nesting, renders headings as bold body text, and boxes every code span. The structured view is currently <i>less</i> readable than the raw TUI it projects.</p><p class="ev"><b>Evidence:</b> Live <b>Omp Web Main</b> at 1280&times;900, chat vs terminal, identical message.</p></div></div>
+<div class="f"><span class="sev crit">CRITICAL</span>
+    <div><h3>Nested Markdown lists render flat</h3><p>A parent bullet with six sub-items - macOS, Node 22, tmux, OMP capabilities, <code>~/workspace</code>, packaged <code>node-pty</code> - renders all seven at the same indent level, so the sub-items read as peers of their parent. This is a renderer defect, not a styling preference: the meaning changes.</p><p class="ev"><b>Evidence:</b> Chat, <b>Verified</b> section. Terminal renders the same list correctly nested.</p></div></div>
+<div class="f"><span class="sev crit">CRITICAL</span>
+    <div><h3>The transcript has no turn structure</h3><p>At rest there is no user/assistant silhouette, no turn boundary, no timestamp and no anchor of any kind - just continuous prose from the top of the viewport to the composer. Nothing answers <i>where did this turn start</i> or <i>what did I ask</i>. Scrolling back through a long session means reading, not scanning.</p><p class="ev"><b>Evidence:</b> Chat at 1280&times;900: 740px of continuous text, zero structural marks.</p></div></div>
+<div class="f"><span class="sev high">HIGH</span>
+    <div><h3>Inline code chips fight the prose</h3><p>Every code span gets a filled box at near-body size. On lines with three or four spans - common in this app's output - the boxes dominate and the baseline rhythm breaks. The terminal's approach (colour, no box) carries the same signal at a fraction of the weight.</p><p class="ev"><b>Evidence:</b> Chat, <b>Release work</b>: four boxed spans in four consecutive lines.</p></div></div>
+<div class="f"><span class="sev high">HIGH</span>
+    <div><h3>The disabled composer looks enabled</h3><p>With no session selected the send button keeps its full accent fill and the composer keeps its resting border, so the primary action of the screen reads as available when it is inert. The only disabled cue is the placeholder text.</p><p class="ev"><b>Evidence:</b> First load, no session: <code>#chat-send</code> disabled, still <code>--accent-2</code>.</p></div></div>
+<div class="f"><span class="sev high">HIGH</span>
+    <div><h3>The empty state wastes the entire canvas</h3><p>A 1040&times;740 region holds one heading and one sentence. Nothing surfaces recent work, nothing teaches the keyboard grammar, nothing offers a next action beyond the sidebar the user is already looking at. This is the app's first impression for a new open-source user.</p><p class="ev"><b>Evidence:</b> First load at 1280&times;900.</p></div></div>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Findings - shell, navigation, mobile</span>
+    <div class="f"><span class="sev high">HIGH</span>
+    <div><h3>The runtime rail under-delivers against the TUI status line</h3><p>The terminal's status line carries model, cwd, git branch with dirty counts, session name, memory, spend, and context as a percentage of a stated window. The chat rail shows model, effort, provider, a cwd truncated mid-word, and a bare token count with no denominator or bar. Cost and branch - arguably the two facts an operator checks most - appear only in the mode the user is being steered away from.</p><p class="ev"><b>Evidence:</b> Terminal: <code>feat/chat-mode *14 ?1 &middot; $408.88 &middot; 28.0%/272K</code>. Chat: <code>77K tokens</code>.</p></div></div>
+<div class="f"><span class="sev high">HIGH</span>
+    <div><h3>The mobile session drawer is a dead end</h3><p>At 390px the drawer is the full viewport width, so the menu button that opened it sits behind it. There is no close control, no backdrop to tap, and the edge-swipe gesture was deferred. Once the list is open the only exit is committing to a session.</p><p class="ev"><b>Evidence:</b> 390&times;844: <code>#sidebar</code> width 390, not <code>.hidden</code>; no dismiss control in the interactive tree.</p></div></div>
+<div class="f"><span class="sev med">MEDIUM</span>
+    <div><h3>The workflow strip spends a full row saying nothing</h3><p>With all tasks complete the strip still occupies prime space directly above the composer to report <b>No open tasks &middot; 6/6</b>. A persistent surface should earn its place every frame or collapse to a marker.</p><p class="ev"><b>Evidence:</b> Chat, live session with a completed Todo.</p></div></div>
+<div class="f"><span class="sev med">MEDIUM</span>
+    <div><h3>Seven same-weight header icons, destructive one among them</h3><p>Mode, usage, profile, alerts, reload, profile-reload and kill all render at identical size and weight, with no grouping and no labels. The red kill affordance sits one tab-stop from routine controls.</p><p class="ev"><b>Evidence:</b> Chat header at 1280&times;900 with an active session.</p></div></div>
+<div class="f"><span class="sev med">MEDIUM</span>
+    <div><h3>Status is inert in the common case</h3><p>Every session in a 49-folder workspace reported <i>Idle</i>. The attention system's main visual channel - the status dot - therefore carries no information most of the time, while still consuming the leading position in every row.</p><p class="ev"><b>Evidence:</b> 1280 and 390 captures: 6 pinned sessions, all <code>status-idle</code>.</p></div></div>
+<div class="f"><span class="sev med">MEDIUM</span>
+    <div><h3>No hierarchy between projects and sessions, and a column of noise</h3><p>Folder rows and session rows share weight, and at 390px fifteen always-visible <code>&#8943;</code> glyphs stack into a vertical line down the right edge that reads as structure but carries none. The permanent footer (<b>6 profiles &middot; 49 folders</b>) spends the sidebar's last row on a number nobody acts on.</p><p class="ev"><b>Evidence:</b> 390&times;844 drawer.</p></div></div>
+<div class="f"><span class="sev med">MEDIUM</span>
+    <div><h3>The keyboard is invisible</h3><p><code>/</code> focuses search today and nothing advertises it. There is no cheatsheet, no shortcut hints in menus, and no discoverable path to anything faster than the mouse - in a tool whose users live in a terminal.</p><p class="ev"><b>Evidence:</b> Full interactive tree at 1280: no shortcut affordance rendered.</p></div></div>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">What this implies for the craft pass</span>
+    <p class="ds-note"><b>Renderer before styling.</b> Nesting and heading hierarchy are correctness
+      bugs. No amount of typography fixes a list that lost its structure.</p>
+    <p class="ds-note"><b>The TUI is the bar, not the fallback.</b> Every fact the status line shows,
+      the rail should show at least as well. Chat earns its default position by being denser
+      <i>and</i> more scannable, not calmer and thinner.</p>
+    <p class="ds-note"><b>Turn structure is the highest-leverage single change.</b> It converts the
+      transcript from a document you read into a record you scan, and it is pure CSS plus the
+      boundaries the projector already knows.</p>
+    <p class="ds-note"><b>Two dead ends to close:</b> the mobile drawer with no exit, and the
+      first-run screen that teaches nothing.</p>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Resolution &mdash; craft pass, same day</span>
+    <p class="ds-note">Eleven of the thirteen findings are fixed in the working
+      copy. Slices 1&ndash;2 are on <code>main</code>; slices 3&ndash;8 are on
+      <code>feat/visual-pass</code>, held there so the look can be iterated
+      before it merges. Full detail in
+      <code>docs/plans/ux-aaa-craft-pass.md</code>.</p>
+    <p class="ds-note"><b>Fixed:</b> list nesting and lazy continuation &middot;
+      heading scale &middot; inline-code weight &middot; turn anchors with start
+      times &middot; spend in the rail (verified equal to the TUI at
+      <code>$408.88</code>) &middot; workspace-relative cwd &middot; rail
+      degradation below 720px &middot; disabled send &middot; the workflow strip
+      that reported nothing &middot; the landing screen &middot; the compact
+      drawer dead end &middot; destructive-action separation. Plus a light theme
+      and a fix to the update signal, which watched only
+      <code>main.js?v=</code> and let CSS-only changes ship silently.</p>
+    <p class="ds-note"><b>Open by choice:</b> branch and dirty state in the rail
+      needs a cached endpoint rather than a git call per poll; context
+      percentage stays omitted because only three models in the local
+      <code>models.yml</code> carry a <code>contextWindow</code> and inventing
+      precision is worse than omitting it; status being quiet when every session
+      is idle is the intended priority order, not a defect.</p>
+  </section>
+
+</div>
+</body>
+</html>

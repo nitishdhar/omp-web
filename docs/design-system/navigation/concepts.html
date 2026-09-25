@@ -1,0 +1,205 @@
+<!-- @dsCard group="Navigation" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Navigation directions</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.opt{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,320px);gap:20px;align-items:start;
+  padding:18px;border:1px solid var(--line);border-radius:10px;background:var(--panel-2);margin-bottom:14px}
+.opt h3{margin:0 0 6px;font-size:14px;font-weight:640}
+.opt .tag{display:inline-block;margin-bottom:8px;padding:2px 8px;border-radius:999px;
+  font:700 9.5px var(--font-ui)}
+.tag.rec{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
+.tag.big{background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn)}
+.tag.small{background:var(--row-hover);color:var(--muted)}
+.opt p{margin:0 0 8px;color:var(--muted);font-size:12.5px;line-height:1.6}
+.opt .cost{margin:0;color:var(--faint);font-size:11.5px;line-height:1.5}
+.wire{border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--bg);
+  font:10.5px var(--font-ui)}
+.w-head{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line);
+  background:var(--panel);color:var(--faint);font-size:9.5px}
+.w-body{display:flex;min-height:186px}
+.w-rail{width:112px;border-right:1px solid var(--line);padding:6px}
+.w-main{flex:1;padding:8px;display:flex;flex-direction:column;gap:6px}
+.w-sec{margin:5px 0 3px;color:var(--faint);font:700 8px var(--font-ui)}
+.w-sec.hot{color:var(--warn)}
+.w-row{display:flex;align-items:center;gap:5px;padding:3px 4px;border-radius:4px;
+  color:var(--muted);font-size:9.5px}
+.w-row.sel{background:color-mix(in srgb,var(--accent) 12%,transparent);color:var(--text)}
+.w-dot{width:5px;height:5px;border-radius:50%;flex:none}
+.w-line{height:5px;border-radius:999px;background:var(--panel-3)}
+.w-card{padding:7px;border:1px solid var(--line);border-radius:6px;background:var(--panel)}
+.w-card .t{color:var(--text);font-size:9.5px;font-weight:600;margin-bottom:5px}
+.w-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.w-cmd{margin:14px auto 0;width:82%;padding:7px 9px;border:1px solid var(--accent);border-radius:7px;
+  background:var(--pop-bg);color:var(--muted);font-size:9.5px;box-shadow:var(--pop-shadow)}
+.w-bar{padding:5px 8px;border:1px solid var(--line);border-radius:999px;background:var(--panel);
+  color:var(--faint);font-size:9px;margin-bottom:7px}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">Three options</span>
+    <h1>Navigation directions</h1>
+    <p>One ranked rail, a fleet home, or the smallest useful addition. Each shown against the constraint that tmux owns the state and there is no build step.</p>
+  </header>
+
+  <section class="ds-block">
+    <span class="ds-label">The problem being solved</span>
+    <p class="ds-note">Two parallel navigations split attention and neither answers the north star.
+      <b>Projects</b> hides running and blocked work inside collapsed folders; <b>Recent</b> buries
+      it under time buckets the user has to mentally filter. With 37 sessions across 49 folders, the
+      common task — find the one session that needs me — is a scan, not a glance. And the keyboard,
+      in a tool whose users live in a terminal, is invisible: <code>/</code> has focused search for
+      months with nothing advertising it.</p>
+  </section>
+
+  <div class="opt">
+    <div>
+      <span class="tag rec">RECOMMENDED</span>
+      <h3>A &middot; One ranked rail, plus &#8984;K</h3>
+      <p>Retire the Projects/Recent split. One list, always ranked the same way:
+        <b>Needs you &rarr; Working &rarr; Pinned &rarr; Recent 24h &rarr; Projects</b> (collapsed,
+        below the fold). Projects becomes a grouping, not a mode. &#8984;K opens a command palette
+        over everything: jump to a session by name, create in a folder, reload under a profile,
+        kill, switch mode.</p>
+      <p>The ranking already exists in the attention system — this makes it the only ordering
+        instead of one of two. The palette is where the keyboard grammar finally becomes
+        discoverable, and it scales past 37 sessions where any list stops working.</p>
+      <p class="cost"><b>Cost:</b> retires <code>activity.js</code>'s bucket machinery from the
+        common path, adds a palette module and a global key handler. Element ids are API, so the
+        row and menu wiring is reused rather than rebuilt. Roughly one focused session.</p>
+    </div>
+    <div class="wire"><div class="w-head">Unified rail</div><div class="w-body">
+  <div class="w-rail">
+    <div class="w-sec hot">NEEDS YOU 1</div>
+    <div class="w-row"><span class="w-dot" style="background:var(--warn)"></span>Migrate w…</div>
+    <div class="w-sec">WORKING 2</div>
+    <div class="w-row"><span class="w-dot" style="background:var(--ok)"></span>Omp Web M…</div>
+    <div class="w-row"><span class="w-dot" style="background:var(--ok)"></span>MaVoice D…</div>
+    <div class="w-sec">PINNED</div>
+    <div class="w-row sel"><span class="w-dot" style="background:var(--accent)"></span>Release No…</div>
+    <div class="w-sec">RECENT 24H</div>
+    <div class="w-row"><span class="w-dot" style="background:var(--muted)"></span>Codex Lite…</div>
+    <div class="w-sec">PROJECTS 49</div>
+    <div class="w-row">› infra</div>
+  </div>
+  <div class="w-main">
+    <div class="w-line" style="width:70%"></div><div class="w-line" style="width:88%"></div>
+    <div class="w-line" style="width:54%"></div>
+    <div class="w-cmd">⌘K  open session, new, reload, kill…</div>
+  </div>
+</div></div>
+  </div>
+
+  <div class="opt">
+    <div>
+      <span class="tag big">BIGGEST CHANGE</span>
+      <h3>B &middot; Fleet home</h3>
+      <p>A new default surface: every session as a live card — status, current intent, todo
+        progress, spend — with chat as the drill-in. Answers "what is churning" in one glance
+        without opening anything, which is the actual job when you are running many agents at once.</p>
+      <p>This is the only option that treats the fleet, rather than one session, as the subject of
+        the app. It is also the one that needs new backend: per-session derived state for every
+        session at once, where today the projector runs for the open session only.</p>
+      <p class="cost"><b>Cost:</b> a new route and surface, a bounded multi-session projection, and
+        a polling story that does not melt the machine at 37 sessions. Several sessions, and the
+        highest risk of the three.</p>
+    </div>
+    <div class="wire"><div class="w-head">Fleet home</div><div class="w-body">
+  <div class="w-main">
+    <div class="w-sec hot">NEEDS YOU</div>
+    <div class="w-card"><div class="t">Migrate queue worker</div>
+      <div class="w-line" style="width:60%"></div></div>
+    <div class="w-sec">WORKING 2</div>
+    <div class="w-grid">
+      <div class="w-card"><div class="t">Omp Web Main</div><div class="w-line" style="width:80%"></div></div>
+      <div class="w-card"><div class="t">MaVoice Dev</div><div class="w-line" style="width:45%"></div></div>
+    </div>
+    <div class="w-sec">IDLE 34</div>
+    <div class="w-line" style="width:100%"></div>
+  </div>
+</div></div>
+  </div>
+
+  <div class="opt">
+    <div>
+      <span class="tag small">SMALLEST</span>
+      <h3>C &middot; Keep the split, add the palette</h3>
+      <p>Leave Projects/Recent alone and add &#8984;K plus a visible entry point above the list.
+        Buys the keyboard grammar and the scale escape hatch without touching navigation.</p>
+      <p>Honest assessment: this fixes discoverability and leaves the actual complaint — two
+        navigations, neither ranked by what needs you — exactly where it is.</p>
+      <p class="cost"><b>Cost:</b> palette module only. Half a session.</p>
+    </div>
+    <div class="wire"><div class="w-head">Rail + command bar</div><div class="w-body">
+  <div class="w-rail">
+    <div class="w-bar">⌘K</div>
+    <div class="w-sec">PROJECTS | RECENT</div>
+    <div class="w-row"><span class="w-dot" style="background:var(--warn)"></span>Migrate w…</div>
+    <div class="w-row sel"><span class="w-dot" style="background:var(--ok)"></span>Omp Web M…</div>
+    <div class="w-row"><span class="w-dot" style="background:var(--muted)"></span>Release No…</div>
+    <div class="w-row"><span class="w-dot" style="background:var(--muted)"></span>Codex Lite…</div>
+  </div>
+  <div class="w-main">
+    <div class="w-line" style="width:70%"></div><div class="w-line" style="width:88%"></div>
+    <div class="w-line" style="width:54%"></div>
+  </div>
+</div></div>
+  </div>
+
+  <section class="ds-block">
+    <span class="ds-label">What does not change in any of them</span>
+    <p class="ds-note">tmux stays the only writer and the only state store. Rows keep stable
+      <code>created</code> ordering inside groups, because <code>session_activity</code> bumps on
+      attach and reshuffles rows under the cursor. Every new event gets its subscriber in the same
+      commit. No sidecar state file. Terminal stays pure passthrough.</p>
+  </section>
+
+</div>
+</body>
+</html>

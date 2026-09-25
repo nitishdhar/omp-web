@@ -48,7 +48,7 @@ omp --version
 source, install its locked dependencies, then use the guided setup:
 
 ```sh
-git clone https://github.com/nitishdhar/omp-web.git
+git clone https://github.com/<owner>/omp-web.git
 cd omp-web
 npm ci
 npm run doctor

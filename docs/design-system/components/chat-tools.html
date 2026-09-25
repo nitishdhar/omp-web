@@ -1,0 +1,191 @@
+<!-- @dsCard group="Chat" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tool calls and receipts</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.log{display:flex;flex-direction:column;gap:18px;padding:24px;border:1px solid var(--line);
+  border-radius:10px;background:var(--bg)}
+.item{width:min(100%,var(--reading-width));margin-inline:auto}
+.group-summary{display:flex;align-items:center;gap:6px;min-height:28px;padding:2px 0 5px;
+  border-bottom:1px solid color-mix(in srgb,var(--line) 68%,transparent);cursor:pointer}
+.chevron{color:var(--faint);font-size:10px;width:10px}
+.chevron.open{transform:rotate(90deg)}
+.group-label{color:var(--muted);font:600 11.5px var(--font-ui)}
+.group-counts{color:var(--faint);font:11px var(--font-mono)}
+.group-duration{margin-left:auto;color:var(--faint);font:10.5px var(--font-mono)}
+.group-failure{color:var(--danger);font:600 10.5px var(--font-ui)}
+.group-body{display:flex;flex-direction:column;gap:7px;padding-top:9px}
+.tool{border:1px solid var(--line);border-radius:7px;background:var(--panel);overflow:hidden}
+.tool.running{border-left:3px solid var(--accent)}
+.tool.error{border-left:3px solid var(--danger)}
+.tool-summary{display:flex;align-items:center;flex-wrap:wrap;gap:7px;min-height:38px;padding:7px 10px;
+  cursor:pointer}
+.tool-name{color:var(--text);font:600 11.5px var(--font-mono)}
+.tool-intent{flex:1;min-width:0;overflow:hidden;color:var(--muted);font-size:12px;
+  text-overflow:ellipsis;white-space:nowrap}
+.state{flex:none;padding:1px 6px;border-radius:999px;background:var(--row-hover);
+  font:590 10.5px var(--font-ui);color:var(--muted)}
+.state.running{color:var(--accent)} .state.ok{color:var(--ok)}
+.state.error{color:var(--danger)} .state.skipped{color:var(--muted)}
+.chip{padding:1px 6px;border:1px solid var(--line);border-radius:999px;background:var(--panel-2);
+  color:var(--muted);font:10px var(--font-mono)}
+.chip.err{border-color:color-mix(in srgb,var(--danger) 55%,var(--line));color:var(--danger)}
+.chip.trunc{font-style:italic}
+.tool-section{padding:8px 10px;border-top:1px solid var(--line)}
+.section-label{margin-bottom:5px;color:var(--faint);font:590 10.5px var(--font-ui)}
+.section-body{margin:0;font:11.5px/1.55 var(--font-mono);color:var(--text);white-space:pre-wrap}
+.changes{display:grid;gap:4px;padding:7px 10px 10px}
+.change{display:flex;align-items:baseline;gap:10px;padding:6px 8px;border-radius:7px;
+  background:var(--panel-2);font-size:11px}
+.change-path{flex:1;min-width:0;overflow:hidden;color:var(--text);font-family:var(--font-mono);
+  text-overflow:ellipsis;white-space:nowrap}
+.change-stats{flex:none;color:var(--muted);font-family:var(--font-mono)}
+.receipt{display:flex;align-items:center;gap:8px;padding:6px 0;color:var(--faint);font-size:11px}
+.receipt-file{max-width:190px;padding:1px 6px;overflow:hidden;border-radius:999px;
+  background:var(--row-hover);color:var(--muted);font:10.5px var(--font-mono);
+  text-overflow:ellipsis;white-space:nowrap}
+.receipt-more{color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">Chat mode</span>
+    <h1>Tool calls and receipts</h1>
+    <p>Tool noise is the default failure of an agent UI. One collapsed row per turn, a receipt that answers what changed, and detail that only exists while you are looking at it.</p>
+  </header>
+
+  <section class="ds-block on-bg">
+    <span class="ds-label">Collapsed turn - every call in one active turn folds into one row</span>
+    <div class="log">
+      <div class="item">
+        <div class="group-summary"><span class="chevron">&rsaquo;</span>
+          <span class="group-label">Worked</span>
+          <span class="group-counts">read &times;3 &middot; edit &middot; bash</span>
+          <span class="group-failure">1 failed</span>
+          <span class="group-duration">11.4s</span></div>
+        <div class="receipt"><span class="receipt-file">public/chat.css</span>
+          <span class="receipt-file">public/js/chat/composer.js</span>
+          <span class="receipt-more">+2 more</span></div>
+      </div>
+      <div class="item">
+        <div class="group-summary"><span class="chevron">&rsaquo;</span>
+          <span class="group-label">Working</span>
+          <span class="group-counts">grep &times;2 &middot; read</span>
+          <span class="state running" style="margin-left:auto">running</span></div>
+      </div>
+    </div>
+    <p class="ds-note">The accessible label carries the whole story -
+      <code>Tools, 97 calls, 1 running, 1 failed</code> - so the collapsed row is not a visual-only
+      summary. The turn receipt below it answers <i>what did it do while I was away</i> without
+      expanding anything.</p>
+  </section>
+
+  <section class="ds-block on-bg">
+    <span class="ds-label">Expanded - nested detail is built only while open</span>
+    <div class="log">
+      <div class="item">
+        <div class="group-summary"><span class="chevron open">&rsaquo;</span>
+          <span class="group-label">Worked</span>
+          <span class="group-counts">3 calls</span>
+          <span class="group-duration">11.4s</span></div>
+        <div class="group-body">
+          <div class="tool"><div class="tool-summary"><span class="tool-name">read</span>
+            <span class="tool-intent">public/js/chat/composer.js</span>
+            <span class="chip">418 lines</span><span class="state ok">ok</span></div></div>
+
+          <div class="tool"><div class="tool-summary"><span class="tool-name">edit</span>
+            <span class="tool-intent">Replace the collapse-measure with a mirror</span>
+            <span class="state ok">ok</span></div>
+            <div class="changes"><div class="change">
+              <span class="change-path">public/js/chat/composer.js</span>
+              <span class="change-stats">+18 &minus;6</span></div></div>
+          </div>
+
+          <div class="tool error"><div class="tool-summary"><span class="tool-name">bash</span>
+            <span class="tool-intent">npm run smoke -- --viewport 390</span>
+            <span class="chip err">exit 1</span><span class="state error">error</span></div>
+            <div class="tool-section"><div class="section-label">Result</div>
+              <p class="section-body">smoke: tail gap drifted to 42px after keystroke 88</p></div>
+            <div class="tool-section"><div class="section-label">Arguments</div>
+              <p class="section-body">{ "cmd": "npm run smoke -- --viewport 390" }
+              <span class="chip trunc">truncated</span></p></div>
+          </div>
+
+          <div class="tool running"><div class="tool-summary"><span class="tool-name">bash</span>
+            <span class="tool-intent">Re-running the smoke with the mirror in place</span>
+            <span class="state running">running</span></div></div>
+
+          <div class="tool"><div class="tool-summary"><span class="tool-name">write</span>
+            <span class="tool-intent">Skipped due to queued user message</span>
+            <span class="state skipped">skipped</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Projection rules the visuals depend on</span>
+    <p class="ds-note"><b>State</b> is derived, never invented:
+      <code>details.__synthetic</code> &rarr; skipped &middot; <code>isError</code> &rarr; error &middot;
+      a start with no result yet &rarr; running &middot; otherwise ok. An unknown entry type degrades
+      to a bounded <code>event</code> - it never gets a fabricated status.</p>
+    <p class="ds-note"><b>Changed files</b> come only from successful structured edit/apply-patch
+      results and applied AST-edit metadata. Prose and tool arguments are never read as evidence
+      that a file changed.</p>
+    <p class="ds-note"><b>Partial data is visible.</b> Truncated fields carry a chip, bounded Todo
+      and agent collections expose omitted counts, and malformed or still-scanning records produce
+      an attributed notice rather than a silent gap.</p>
+    <p class="ds-note"><b>Control plane never becomes prose.</b> Every <code>custom_message</code> is
+      a harness envelope - async-result, irc:incoming, mid-run-todo-nudge, skill-prompt,
+      todo_hud_state. The projector applies the structured effect and drops the raw content
+      regardless of its display flag.</p>
+  </section>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,161 @@
+<!-- @dsCard group="Patterns" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compact and mobile</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.row{display:flex;gap:22px;flex-wrap:wrap;align-items:flex-start}
+.phone{width:320px;border:1px solid var(--line-strong);border-radius:22px;overflow:hidden;
+  background:var(--bg);box-shadow:var(--pop-shadow)}
+.ph-head{display:flex;align-items:center;gap:8px;min-height:52px;padding:8px 12px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+.ph-head .t{overflow:hidden;font-size:13.5px;font-weight:550;text-overflow:ellipsis;white-space:nowrap}
+.ico{display:inline-grid;place-items:center;width:40px;height:40px;border:0;border-radius:8px;
+  background:transparent;color:var(--text);font-size:15px}
+.ph-body{display:flex;flex-direction:column;gap:14px;padding:14px 12px;min-height:250px}
+.bubble{align-self:flex-end;max-width:85%;padding:8px 12px;border:1px solid var(--line);
+  border-radius:12px;background:var(--bubble-user);font-size:14px;line-height:1.6}
+.prose{font-size:14.5px;line-height:1.7}
+.sheet{margin-top:auto;padding:14px 13px;border-top:1px solid var(--line);
+  border-radius:16px 16px 0 0;background:var(--panel);box-shadow:0 -8px 24px rgba(0,0,0,.36)}
+.sheet .lbl{color:var(--warn);font:650 11px var(--font-ui)}
+.sheet h3{margin:6px 0 4px;font-size:14px;font-weight:620}
+.sheet p{margin:0 0 11px;color:var(--muted);font-size:12px;line-height:1.5}
+.sheet .primary{width:100%;min-height:44px}
+.compose{display:flex;align-items:flex-end;gap:5px;margin:0 12px 12px;padding:7px;
+  border:1px solid var(--line);border-radius:12px;background:var(--panel)}
+.compose textarea{flex:1;min-height:38px;border:0;outline:0;background:transparent;resize:none;
+  color:var(--text);font:16px/1.5 var(--font-ui)}
+.compose textarea::placeholder{color:var(--faint)}
+.cb{display:inline-grid;place-items:center;width:40px;height:40px;border:0;border-radius:10px;
+  background:var(--panel-2);color:var(--faint);font-size:16px}
+.cb.on{background:var(--accent-2);color:#fff}
+.drawer{width:290px;border:1px solid var(--line);border-radius:12px;background:var(--panel);
+  overflow:hidden;box-shadow:24px 0 60px rgba(0,0,0,.56)}
+.d-row{display:flex;align-items:center;gap:7px;min-height:44px;padding:7px 10px;font-size:14px}
+.d-row .dot{width:8px;height:8px}
+.d-row .t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d-row .m{width:40px;text-align:center;color:var(--faint)}
+.d-row.active{background:color-mix(in srgb,var(--accent) 8%,transparent);position:relative}
+.d-row.active::before{content:"";position:absolute;left:0;top:5px;bottom:5px;width:2px;
+  border-radius:999px;background:var(--accent)}
+.d-sub{padding-left:14px;color:var(--faint);font-size:11.5px}
+.needs-you{padding:2px 7px;border-radius:999px;
+  background:color-mix(in srgb,var(--warn) 16%,transparent);color:var(--warn);
+  font-size:10.5px;font-weight:700}
+.d-head{padding:10px 12px 6px;color:var(--warn);font:590 11px var(--font-ui)}
+.status-waiting{background:var(--warn)} .status-working{background:var(--ok)}
+.status-idle{background:var(--muted);opacity:.55}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">390px</span>
+    <h1>Compact and mobile</h1>
+    <p>The phone's job is triage: see what needs you, answer or defer it, and get back out.</p>
+  </header>
+
+  <section class="ds-block on-bg">
+    <span class="ds-label">390px - triage from the couch, not a shrunken desktop</span>
+    <div class="row">
+      <div class="phone">
+        <header class="ph-head"><button class="ico">&#9776;</button>
+          <span class="t">Migrate queue worker</span>
+          <span style="flex:1"></span><button class="ico">&#9002;_</button></header>
+        <div class="ph-body">
+          <div class="bubble">Ship the dedupe fix and re-run the audit workflow.</div>
+          <div class="prose">Dedupe is in. The audit needs an approval before it can touch
+            the scheduler.</div>
+          <div class="sheet"><span class="lbl">Needs you</span>
+            <h3>Approve the audit workflow run?</h3>
+            <p>It will trigger 1 workflow on the staging host and write to the jobs table.</p>
+            <button class="primary">Answer in Terminal</button></div>
+        </div>
+        <div class="compose"><button class="cb">&#128206;</button>
+          <textarea rows="1" placeholder="Send a message&hellip;"></textarea>
+          <button class="cb">&#127908;</button><button class="cb on">&uarr;</button></div>
+      </div>
+
+      <div class="drawer">
+        <div class="d-head">Needs you</div>
+        <div class="d-row active"><span class="dot status-waiting"></span>
+          <span class="t">Migrate queue worker</span><span class="needs-you">NEEDS YOU</span>
+          <span class="m">&#8943;</span></div>
+        <div class="d-sub" style="padding:0 10px 8px 24px">job-runner &middot; openai &middot; now</div>
+        <div class="d-row"><span class="dot status-working"></span>
+          <span class="t">Omp Web Main</span><span class="m">&#8943;</span></div>
+        <div class="d-sub" style="padding:0 10px 8px 24px">omp-web &middot; claude &middot; 1m ago</div>
+        <div class="d-row"><span class="dot status-idle"></span>
+          <span class="t" style="color:var(--muted)">Restore origin history</span>
+          <span class="m">&#8943;</span></div>
+        <div class="d-sub" style="padding:0 10px 8px 24px">omp-web &middot; mix &middot; 2h ago</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Compact rules</span>
+    <p class="ds-note"><b>44px targets everywhere</b> - rows, row menus, view tabs, folder toggles,
+      dialog buttons. Row menus are always visible; there is no hover to reveal them.</p>
+    <p class="ds-note"><b>16px inputs</b>, always - anything smaller makes iOS Safari zoom the page
+      on focus.</p>
+    <p class="ds-note"><b>Row 2 carries identity.</b> Desktop can lean on a hover tooltip to
+      separate two rows both reading <i>Restore origin&hellip;</i>; touch cannot, so folder, profile
+      and relative time are printed.</p>
+    <p class="ds-note"><b>Safe areas are honoured</b> by the drawer, dialogs and the fixed update
+      pill; dialogs dock to the bottom edge with 16px top corners. The terminal scrubber is
+      <code>display:none</code> on compact - it is a pointer affordance.</p>
+    <p class="ds-note"><b>Touch never focuses a textarea implicitly.</b> Tapping chat or terminal
+      content leaves <code>BODY</code> active and the xterm helper stays
+      <code>inputmode=none</code>, so the keyboard only appears when the composer is tapped.</p>
+    <p class="ds-note" style="color:var(--warn)">Open: physical iOS keyboard, selection and touch
+      behaviour is still unverified. 390px desktop emulation is not equivalent evidence.</p>
+  </section>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,94 @@
+<!-- @dsCard group="Chat" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Composer, runtime and workflow</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.shell{display:flex;flex-direction:column;width:min(100%,var(--reading-width));margin-inline:auto;padding:10px 0 4px}.stage{padding:22px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.chat-composer{display:flex;align-items:flex-end;gap:5px;min-height:54px;padding:7px;border:1px solid var(--line);border-radius:12px;background:var(--panel)}.chat-composer.focused{border-color:color-mix(in srgb,var(--accent) 55%,var(--line));box-shadow:var(--focus-ring)}.chat-composer textarea{flex:1;min-width:0;min-height:38px;padding:8px 7px;resize:none;border:0;border-radius:8px;outline:0;background:transparent;color:var(--text);font:14px/1.6 var(--font-ui)}.chat-composer textarea::placeholder{color:var(--faint)}
+.cbtn{display:inline-grid;place-items:center;flex:none;width:40px;min-width:40px;height:40px;padding:0;border:0;border-radius:10px;background:transparent;color:var(--muted)}.cbtn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.cbtn.send{background:var(--accent-2);color:#fff;font-size:17px}.cbtn.send.off{background:var(--panel-2);color:var(--faint)}.cbtn.stop{border:1px solid color-mix(in srgb,var(--danger) 58%,var(--line));color:var(--danger)}
+.chat-runtime{display:flex;align-items:center;gap:10px;min-height:24px;padding:5px 5px 0;color:var(--faint);font:11px var(--font-ui)}.runtime-status{display:flex;align-items:center;flex:1;min-width:0;overflow:hidden}.cs-item{flex:none;white-space:nowrap}.cs-item+.cs-item::before{content:"·";margin:0 7px;color:var(--line-strong)}.cs-model,.cs-effort,.cs-spend{color:var(--muted);font-weight:600}.cs-provider,.cs-cwd{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.cs-cwd{flex:0 1 180px;max-width:180px}.cs-ctx{display:flex;align-items:center;flex:none;gap:4px;white-space:nowrap}.cs-ctx-bar{position:relative;display:inline-block;width:36px;height:4px;overflow:hidden;border-radius:999px;background:var(--line)}.cs-ctx-fill{position:absolute;inset:0 auto 0 0;border-radius:inherit;background:var(--accent)}.cs-ctx-bar.warn .cs-ctx-fill{background:var(--danger)}
+.panels{width:100%;margin:0 auto 8px}.panels-toggle{--p:62%;position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;align-items:center;gap:9px;width:100%;min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--panel);color:var(--text);text-align:left;overflow:hidden}.panels-toggle::after{content:"";position:absolute;bottom:0;left:0;width:var(--p);height:2px;background:color-mix(in srgb,var(--accent) 70%,transparent)}.workflow-mark{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 14%,transparent)}.workflow-copy{display:flex;align-items:baseline;gap:8px;min-width:0}.workflow-label{flex:none;color:var(--muted);font-size:11px;font-weight:650}.workflow-summary{min-width:0;overflow:hidden;color:var(--text);font-size:12.5px;text-overflow:ellipsis;white-space:nowrap}.workflow-meta{flex:none;color:var(--faint);font:10.5px var(--font-mono)}.panels-chevron{color:var(--faint)}.panels-content{margin-top:8px;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--pop-bg);box-shadow:var(--pop-shadow)}
+.panel-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px;color:var(--faint);font:590 10.5px var(--font-ui)}.ct-phase{margin-bottom:10px}.ct-phase-name{margin-bottom:5px;color:var(--muted);font-size:11px;font-weight:590}.ct-phase.active .ct-phase-name{color:var(--accent)}.ct-tasks{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}.ct-task{display:flex;align-items:flex-start;gap:6px;font-size:12px;line-height:1.4}.ct-glyph{flex:none;width:14px;margin-top:1px;font-size:10px;text-align:center;color:var(--faint)}.ct-task.done .ct-content{color:var(--faint);text-decoration:line-through}.ct-task.in .ct-glyph{color:var(--accent)}.ct-task.blocked .ct-glyph,.ct-blocker{color:var(--danger)}
+.cag-row{display:flex;align-items:flex-start;flex-wrap:wrap;gap:6px;margin-bottom:7px;font-size:12px}.cag-dot{flex:none;width:7px;height:7px;margin-top:4px;border-radius:50%;background:var(--muted)}.cag-row.running .cag-dot{background:var(--ok);animation:cpulse 1.4s ease-in-out infinite}.cag-name{color:var(--text);font-weight:600}.cag-type{color:var(--muted);font:10px var(--font-mono)}.cag-preview{width:100%;padding-left:13px;overflow:hidden;color:var(--muted);font-size:11px;text-overflow:ellipsis;white-space:nowrap}
+.advisor{margin-bottom:8px;padding:10px 12px;border:1px solid var(--line);border-left:3px solid var(--line-strong);border-radius:10px;background:var(--panel)}.advisor.concern{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 5%,var(--panel))}.advisor-head{display:flex;align-items:baseline;gap:8px;margin-bottom:6px;color:var(--muted);font-size:11px}.advisor-badge{flex:none;padding:1px 6px;border-radius:999px;color:var(--warn);background:color-mix(in srgb,var(--warn) 15%,var(--row-hover));font-weight:620;text-transform:uppercase}.advisor-guidance{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.advisor-body{color:var(--text);font-size:12.5px;line-height:1.5;white-space:pre-wrap}
+.advisor.nit{border-left-color:var(--accent);background:color-mix(in srgb,var(--accent) 5%,var(--panel))}.advisor.blocker{border-left-color:var(--danger);background:color-mix(in srgb,var(--danger) 5%,var(--panel))}.advisor.nit .advisor-badge{color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,var(--row-hover))}.advisor.blocker .advisor-badge{color:var(--danger);background:color-mix(in srgb,var(--danger) 15%,var(--row-hover))}
+.ask{padding:11px 12px;margin-bottom:8px;border:1px solid color-mix(in srgb,var(--warn) 45%,var(--line));border-left:3px solid var(--warn);border-radius:9px;background:color-mix(in srgb,var(--warn) 6%,var(--panel))}.cask-header{display:flex;align-items:center;gap:8px;margin-bottom:7px}.cask-label{color:var(--warn);font:650 11px var(--font-ui)}.cask-q{margin:0 0 8px;font-size:13px;line-height:1.5}.cask-opts{display:flex;flex-direction:column;gap:5px;margin-bottom:9px}.cask-opt{padding:7px 10px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2);font-size:12px;color:var(--muted)}.cask-opt b{color:var(--text);font-weight:600}.cask-switch{min-height:34px;padding:7px 12px;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--text);font:650 11.5px var(--font-ui)}
+@keyframes cpulse{0%,100%{opacity:1}50%{opacity:.4}}@media(max-width:600px){.stage{padding:12px}.chat-composer{min-height:58px;padding:6px;gap:4px}.chat-composer textarea{min-height:44px;font-size:16px}.cbtn{width:44px;min-width:44px;height:44px}.panels-toggle{min-height:44px}.cs-provider,.cs-cwd,.cs-effort{display:none}.chat-runtime{gap:6px}}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">Chat mode</span>
+    <h1>Composer, runtime and workflow</h1>
+    <p>The input is the mission-control surface: what is running, what it is working on, what it is costing, and the one control that stops it.</p>
+  </header>
+
+  <section class="ds-block on-bg">
+    <span class="ds-label">Idle — workflow strip, composer, runtime rail</span>
+    <div class="stage"><div class="shell"><div class="panels"><button class="panels-toggle" aria-label="Composer; wire the mirror measure; 8 of 13"><span class="workflow-mark"></span><span class="workflow-copy"><span class="workflow-label">Composer</span><span class="workflow-summary">Wire the mirror measure</span></span><span class="workflow-meta">8/13 · 2 agents</span><span class="panels-chevron">›</span></button></div><div class="chat-composer"><button class="cbtn" aria-label="Attach"><svg viewBox="0 0 24 24"><path d="m20.3 11.7-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.5 3.5 0 1 1 5 5l-8.5 8.5a2 2 0 0 1-2.8-2.8l7.8-7.8"/></svg></button><textarea rows="1" aria-label="Message agent" placeholder="Send a message&hellip;"></textarea><button class="cbtn" aria-label="Dictate"><svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg></button><button class="cbtn send off" aria-label="Send" disabled>&uarr;</button></div><div class="chat-runtime"><footer class="runtime-status"><span class="cs-item cs-model">opus-5[1m]</span><span class="cs-item cs-provider">claude</span><span class="cs-item cs-effort">high</span><span class="cs-item cs-cwd">~/workspace/omp-web</span><span class="cs-item cs-spend">$0.84</span></footer><span class="cs-ctx"><span class="cs-ctx-bar"><span class="cs-ctx-fill" style="width:38%"></span></span><span>38%</span></span></div></div></div>
+    <p class="ds-note">The rail stays quiet but reports the useful model, provider, effort, folder, spend and context. At 390px provider, folder and effort drop before changing spend and context.</p>
+  </section>
+  <section class="ds-block on-bg">
+    <span class="ds-label">Advisor — contextual guidance above the composer</span>
+    <div class="stage"><div class="shell"><div class="advisor concern" role="note"><div class="advisor-head"><span class="advisor-badge">concern</span><span class="advisor-guidance">weigh, don&rsquo;t blindly obey</span></div><div class="advisor-body">The migration changes a shared contract. Confirm the consumer path before deleting the old field.</div></div><div class="chat-composer focused"><button class="cbtn" aria-label="Attach"><svg viewBox="0 0 24 24"><path d="m20.3 11.7-7.8 7.8a5 5 0 0 1-7.1-7.1l8.5-8.5a3.5 3.5 0 1 1 5 5l-8.5 8.5a2 2 0 0 1-2.8-2.8l7.8-7.8"/></svg></button><textarea rows="1" aria-label="Message agent">Trace the consumer and report the exact call site.</textarea><button class="cbtn stop" aria-label="Stop active work"><svg viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button><button class="cbtn send" aria-label="Send">&uarr;</button></div></div></div>
+    <div class="stage"><div class="shell"><div class="advisor nit" role="note"><div class="advisor-head"><span class="advisor-badge">nit</span><span class="advisor-guidance">optional refinement</span></div><div class="advisor-body">The copy works; trim the duplicated qualifier if it costs the row a second line.</div></div><div class="advisor blocker" role="note"><div class="advisor-head"><span class="advisor-badge">blocker</span><span class="advisor-guidance">needs resolution before proceeding</span></div><div class="advisor-body">The migration removes a required field. Resolve the consumer contract first.</div></div></div></div>
+    <p class="ds-note">One derived note: nit, concern or blocker changes the left rail and restrained tint. It never becomes a persistent dashboard or a second transcript.</p>
+  </section>
+  <section class="ds-block on-bg">
+    <span class="ds-label">Workflow expanded — optional detail, never a permanent column</span>
+    <div class="stage"><div class="shell"><div class="panels"><button class="panels-toggle"><span class="workflow-mark"></span><span class="workflow-copy"><span class="workflow-label">Composer</span><span class="workflow-summary">Wire the mirror measure</span></span><span class="workflow-meta">8/13 · 2 agents</span><span class="panels-chevron">⌄</span></button><div class="panels-content"><div class="panel-head"><span>Todo</span><span>8 of 13 · 1 omitted phase</span></div><div class="ct-phase"><div class="ct-phase-name">Backend</div><ul class="ct-tasks"><li class="ct-task done"><span class="ct-glyph">&check;</span><span class="ct-content">Bounded incremental reader</span></li></ul></div><div class="ct-phase active"><div class="ct-phase-name">Composer</div><ul class="ct-tasks"><li class="ct-task in"><span class="ct-glyph">&#9679;</span><span class="ct-content">Wire the mirror measure</span></li><li class="ct-task blocked"><span class="ct-glyph">&#9650;</span><span class="ct-content">Physical iOS pass <span class="ct-blocker">&mdash; needs hardware</span></span></li></ul></div><div class="panel-head" style="margin-top:12px"><span>Active agents</span><span>2</span></div><div class="cag-row running"><span class="cag-dot"></span><span class="cag-name">chat-verify</span><span class="cag-type">general-purpose</span><span class="cag-preview">Replay the 500-entry window and report the tail gap</span></div></div></div></div></div>
+  </section>
+  <section class="ds-block on-bg">
+    <span class="ds-label">Pending ask — read-only by design</span>
+    <div class="stage"><div class="shell"><div class="ask"><div class="cask-header"><span class="dot" style="background:var(--warn)"></span><span class="cask-label">Needs you</span></div><p class="cask-q">Which profile should the reload target?</p><div class="cask-opts"><div class="cask-opt"><b>claude</b> — opus-5[1m], keeps the transcript</div><div class="cask-opt"><b>openai</b> — gpt-5-codex, recommended</div></div><button class="cask-switch">Answer in Terminal &rarr;</button></div></div></div>
+    <p class="ds-note">Chat renders the question and every option, then hands the answer to Terminal. A mis-selected answer is worse than a mode switch.</p>
+  </section>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!-- @dsCard group="Patterns" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Constraints behind the design</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.flow{display:flex;align-items:stretch;gap:12px;flex-wrap:wrap}
+.node{flex:1;min-width:170px;padding:14px;border:1px solid var(--line);border-radius:9px;
+  background:var(--panel-2)}
+.node h3{margin:0 0 5px;font-size:12.5px;font-weight:620}
+.node p{margin:0;color:var(--muted);font-size:11.5px;line-height:1.5}
+.node.writer{border-color:color-mix(in srgb,var(--ok) 40%,var(--line));
+  background:color-mix(in srgb,var(--ok) 7%,var(--panel-2))}
+.node.read{border-color:color-mix(in srgb,var(--accent) 34%,var(--line));
+  background:color-mix(in srgb,var(--accent) 6%,var(--panel-2))}
+.arrow{display:grid;place-items:center;color:var(--faint);font-size:16px;min-width:20px}
+.nono{display:grid;gap:8px}
+.nono div{display:flex;gap:9px;align-items:baseline;padding:9px 11px;border:1px solid var(--line);
+  border-left:3px solid var(--danger);border-radius:7px;font-size:12px;line-height:1.5}
+.nono b{flex:none;color:var(--danger);font:650 10.5px var(--font-ui);min-width:74px}
+.inv{display:grid;gap:8px}
+.inv div{display:flex;gap:9px;align-items:baseline;padding:9px 11px;border:1px solid var(--line);
+  border-left:3px solid var(--ok);border-radius:7px;font-size:12px;line-height:1.5}
+.inv b{flex:none;color:var(--ok);font:650 10.5px var(--font-ui);min-width:74px}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">Non-negotiables</span>
+    <h1>Constraints behind the design</h1>
+    <p>The interface is shaped by one architectural fact: tmux owns the session, and everything the web app shows is a projection of what that session wrote down.</p>
+  </header>
+
+  <section class="ds-block">
+    <span class="ds-label">One writer, two views</span>
+    <div class="flow">
+      <div class="node read"><h3>Chat mode</h3><p>Read projection. Polls
+        <code class="ds-mono">GET /chat?from=byte</code> and upserts items by id.</p></div>
+      <div class="arrow">&rarr;</div>
+      <div class="node"><h3>Session JSONL</h3><p>Append-only at runtime, newline-atomic, no fsync.
+        A rewrite is a reset.</p></div>
+      <div class="arrow">&larr;</div>
+      <div class="node writer"><h3>tmux &rarr; omp TUI</h3><p>The single writer and the source of
+        truth. Terminal mode is a PTY bridge onto the same pane.</p></div>
+    </div>
+    <p class="ds-note">Chat input is injected into the same tmux session the terminal already drives
+      - <code>load-buffer</code> + bracketed <code>paste-buffer</code> + <code>Enter</code>. One
+      input path, nothing to hand off, no ownership lease, no second process, no 409. Both modes are
+      views over one session and can be switched at any time, including mid-turn.</p>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Why the design looks the way it does</span>
+    <div class="inv">
+      <div><b>Message-level</b><span>Entries are written complete, with
+        <code class="ds-mono">completedAt</code> and <code class="ds-mono">stopReason</code>. So
+        there is no token streaming to design for - the live signal is the tool-intent line, not a
+        typing cursor.</span></div>
+      <div><b>Append order</b><span>0 forward references across 6,546 measured entries. The renderer
+        reads in file order: no DAG traversal, no active-leaf selection, no branch or rewind UI.</span></div>
+      <div><b>Bounded by default</b><span>240 mounted entries, truncated payloads, bounded Todo and
+        agent collections - every bound has a visible label or omitted count rather than a silent
+        gap.</span></div>
+      <div><b>Read is cheap, write is guarded</b><span>History outlives the runtime: transcript
+        reads work on an exited session, while text and key writes keep the atomic tmux guard so an
+        exited runtime can never turn a chat prompt into a shell command.</span></div>
+    </div>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Non-goals - do not design these</span>
+    <div class="nono">
+      <div><b>No framework</b><span>Native ES modules, no bundler, no build step. A component that
+        needs a compiler cannot ship here.</span></div>
+      <div><b>No second writer</b><span>An RPC child process was tried and retired: upstream has no
+        read-only subscribe for an existing session, so a second process is always a second
+        writer.</span></div>
+      <div><b>No ANSI parsing</b><span>State comes from the JSONL. Never from scraping what the TUI
+        painted.</span></div>
+      <div><b>No theming engine</b><span>A light theme, if it ships, is one
+        <code class="ds-mono">:root[data-theme="light"]</code> block. Nothing else.</span></div>
+      <div><b>No sidecar state</b><span>tmux options and sessionStorage only. No sidebar state file.</span></div>
+      <div><b>Terminal stays pure</b><span>xterm passthrough with zero visual interference. All
+        chrome lives outside <code class="ds-mono">#term-wrap</code>.</span></div>
+    </div>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Working rules for anyone changing this UI</span>
+    <p class="ds-note">Element ids are API - <code>initDom()</code> registers them and none get
+      renamed. Views emit events; <code>main.js</code> owns actions, and every new event gets its
+      subscriber in the same commit. Every shipped frontend change bumps its
+      <code>?v=</code> cache-bust, and every phase is browser-verified at 1280 / 1024 / 390 before
+      it is committed.</p>
+  </section>
+
+</div>
+</body>
+</html>

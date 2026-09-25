@@ -1,0 +1,171 @@
+<!-- @dsCard group="Shell" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Header and terminal</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.stage{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+.term-head{display:flex;align-items:center;gap:8px;min-height:56px;padding:8px 14px;
+  border-bottom:1px solid var(--line);background:var(--panel)}
+.term-session{display:flex;align-items:center;gap:9px;min-width:0}
+.badge{flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+.badge.working{background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb,var(--ok) 16%,transparent);
+  animation:pulse 1s ease-in-out infinite}
+.badge.dead{background:var(--faint);box-shadow:0 0 0 2px var(--danger)}
+.term-title{overflow:hidden;font-size:13.5px;font-weight:550;letter-spacing:-.005em}
+.spacer{flex:1}
+.icon-action{display:inline-grid;place-items:center;flex:none;width:38px;min-height:38px;padding:0;
+  border:0;border-radius:6px;background:transparent;color:var(--text)}
+.icon-action:hover{background:var(--row-hover)}
+.icon-action svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-linecap:round;
+  stroke-linejoin:round;stroke-width:1.8}
+.icon-action.muted{color:var(--muted)}
+.icon-action.on{color:var(--accent)}
+.icon-action.kill{color:var(--danger)}
+.term-body{display:grid;place-items:center;align-content:center;gap:10px;min-height:190px;
+  padding:32px;text-align:center;color:var(--muted);background:var(--term-bg)}
+.term-body h1{margin:0;color:var(--text);font:600 21px var(--font-ui);letter-spacing:-.02em}
+.term-body p{max-width:380px;margin:0;font:13.5px/1.6 var(--font-ui)}
+.kicker{color:var(--muted);font:590 12px var(--font-ui)}
+.termish{min-height:190px;padding:14px 16px;background:var(--term-bg);
+  font:12px/1.65 var(--font-mono);color:#c9d1d9;white-space:pre-wrap}
+.termish .g{color:var(--ok)} .termish .b{color:var(--accent)} .termish .f{color:var(--faint)}
+.update-btn{display:inline-block;padding:8px 12px;border:1px solid color-mix(in srgb,var(--accent) 55%,var(--line));
+  border-radius:999px;background:var(--panel-2);color:var(--accent);font:600 11px var(--font-mono)}
+.scrub{display:inline-flex;align-items:center;gap:8px;padding:5px 8px;border:1px solid var(--line);
+  border-radius:999px;background:var(--pop-bg);color:var(--accent);font:10px var(--font-mono);
+  box-shadow:var(--pop-shadow)}
+.pop{width:min(420px,100%);padding:12px;border:1px solid var(--line);border-radius:8px;
+  background:var(--pop-bg);box-shadow:var(--pop-shadow)}
+.pop-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px;
+  font-size:12.5px}
+.pop-head span{color:var(--faint);font-size:11px}
+.pgrid{display:grid;grid-template-columns:max-content 1fr;gap:6px 14px;font-size:11.5px}
+.pgrid dt{color:var(--faint)}
+.pgrid dd{margin:0;color:var(--muted);font-family:var(--font-mono);font-size:11px}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.42;transform:scale(.72)}}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">App shell</span>
+    <h1>Header and terminal</h1>
+    <p>56px header, one session identity, one destination-labelled mode toggle, and the rest of the actions in priority order. Terminal is full-fidelity mode, not the default.</p>
+  </header>
+
+  <section class="ds-block on-bg">
+    <span class="ds-label">Desktop header - session identity left, actions right</span>
+    <div class="stage"><header class="term-head">
+  <div class="term-session"><span class="badge working"></span>
+    <span class="term-title">Omp Web Main</span></div>
+  <span class="spacer"></span>
+  <button class="icon-action" title="Switch to chat mode"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button>
+  <button class="icon-action muted"><svg viewBox="0 0 24 24"><path d="M3 19h4v-5H3zm7 0h4V9h-4zm7 0h4V4h-4z" fill="currentColor" stroke="none"/></svg></button>
+  <button class="icon-action muted"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 10.5v6M12 7.5h.01"/></svg></button>
+  <button class="icon-action on"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
+  <button class="icon-action" style="font-size:16px">&#8635;</button>
+  <button class="icon-action"><svg viewBox="0 0 24 24"><rect x="4" y="7" width="16" height="12" rx="3"/><path d="M12 4v3M9 12h.01M15 12h.01M9 16h6"/></svg></button>
+  <button class="icon-action kill"><svg viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></svg></button>
+</header>
+      <div class="termish"><span class="f">user@mac</span> <span class="b">~/workspace/omp-web</span>
+&gt; omp
+<span class="g">&#9679;</span> claude &middot; opus-5[1m] &middot; 128k context
+  Reading public/chat.css&hellip;
+</div>
+    </div>
+    <p class="ds-note">The terminal sits <b>in</b> the app: xterm's theme is synced to
+      <code>--term-bg #101214</code> and the old black-on-panel frame is gone. All chrome lives
+      outside <code>#term-wrap</code> - zero visual interference with the TUI.</p>
+  </section>
+  <section class="ds-block on-bg">
+    <span class="ds-label">Compact header - actions collapse behind one &#8943; toggle</span>
+    <div class="stage" style="max-width:390px"><header class="term-head">
+  <button class="icon-action">&#9776;</button>
+  <div class="term-session"><span class="badge dead"></span>
+    <span class="term-title">Migrate queue worker</span></div>
+  <span class="spacer"></span>
+  <button class="icon-action"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg></button>
+  <button class="icon-action muted"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1" fill="currentColor" stroke="none"/></svg></button>
+</header>
+      <div class="term-body"><span class="kicker">No live terminal</span>
+        <h1>Start an OMP session</h1>
+        <p>Select a session from the workspace, or create one in a folder.</p>
+        <button class="primary">New session</button></div>
+    </div>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Header transients</span>
+    <div class="ds-row">
+      <span class="update-btn">Update available &middot; Reload</span>
+      <span class="scrub">Live</span>
+      <span class="scrub" style="color:var(--muted)">&minus;2,418 lines</span>
+    </div>
+    <p class="ds-note">Both are fixed, centered, and never occupy layout - the update pill sits
+      under the header, the scrubber label rides the terminal's right edge while scrollback is held.</p>
+  </section>
+  <section class="ds-block on-bg">
+    <span class="ds-label">Profile popover - anchored under its trigger</span>
+    <div class="pop">
+      <div class="pop-head"><strong>claude</strong><span>3 roles configured</span></div>
+      <dl class="pgrid">
+        <dt>default</dt><dd>claude-opus-5[1m]</dd>
+        <dt>plan</dt><dd>claude-opus-5</dd>
+        <dt>subagent</dt><dd>claude-sonnet-5</dd>
+        <dt>compaction</dt><dd>auto &middot; 62% used</dd>
+      </dl>
+    </div>
+  </section>
+  <section class="ds-block">
+    <span class="ds-label">Mode toggle rule</span>
+    <p class="ds-note">One button, and it always shows the <b>destination</b> icon and label - a
+      speech bubble while in Terminal, a prompt caret while in Chat. The terminal WebSocket stays
+      attached behind chat so tmux sizing survives and switching back is instant.</p>
+  </section>
+
+</div>
+</body>
+</html>

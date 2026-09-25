@@ -1,0 +1,282 @@
+<!-- @dsCard group="Identity" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Logo directions</title>
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0f1113; --panel:#15181b; --panel-2:#1c2025; --panel-3:#232830;
+  --line:rgba(255,255,255,.08); --line-strong:rgba(255,255,255,.14);
+  --text:#e4e7ea; --muted:#9aa0a8; --faint:#6b7178;
+  --accent:#5b8dee; --accent-2:#3f6fd1; --accent-soft:rgba(91,141,238,.10);
+  --danger:#f0606a; --warn:#e0a53e; --shell:#9b8fe8; --ok:#3fb87a;
+  --font-mono:"JetBrains Mono Variable",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
+  --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
+  --pop-shadow:0 8px 24px rgba(0,0,0,.36);
+  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font-ui);
+  -webkit-font-smoothing:antialiased}
+button,input,textarea,select{font:inherit}
+button{cursor:pointer;color:inherit}
+.primary{background:var(--accent-2);color:#fff;border:1px solid transparent;border-radius:6px;padding:8px 13px;font-weight:680}
+.ghost{background:transparent;color:var(--text);border:1px solid transparent;border-radius:6px;padding:8px 11px}
+.danger{background:transparent;color:var(--danger);border:1px solid transparent;border-radius:6px;padding:7px 11px}
+.icon{display:inline-flex;align-items:center;flex:none;color:var(--muted)}
+.dot{display:inline-block;flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint)}
+
+.ds{padding:26px 26px 34px;display:flex;flex-direction:column;gap:22px;max-width:1180px}
+.ds-head{display:flex;flex-direction:column;gap:6px}
+.ds-kicker{color:var(--faint);font:650 10.5px var(--font-ui);letter-spacing:.06em;text-transform:uppercase}
+.ds-head h1{margin:0;font-size:19px;font-weight:650;letter-spacing:-.025em}
+.ds-head p{margin:0;max-width:64ch;color:var(--muted);font-size:12.5px;line-height:1.6}
+.ds-block{display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel)}
+.ds-block.on-bg{background:var(--bg)}
+.ds-label{color:var(--faint);font:590 10.5px var(--font-ui)}
+.ds-note{margin:0;max-width:72ch;color:var(--muted);font-size:12px;line-height:1.55}
+.ds-note code,.ds-mono{font-family:var(--font-mono);font-size:11px;color:var(--text)}
+.ds-grid{display:grid;gap:12px}
+.ds-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.ds-rule{height:1px;background:var(--line);border:0;margin:2px 0}
+.ds-do{color:var(--ok)} .ds-dont{color:var(--danger)}
+
+.marks{display:grid;grid-template-columns:repeat(auto-fit,minmax(248px,1fr));gap:14px}
+.mk{display:flex;flex-direction:column;gap:12px;padding:16px;border:1px solid var(--line);
+  border-radius:10px;background:var(--panel-2)}
+.mk-name{font:640 12.5px var(--font-ui)}
+.mk-note{color:var(--muted);font-size:11.5px;line-height:1.55}
+.mk-row{display:flex;align-items:center;gap:16px;padding:14px;border-radius:9px;background:var(--bg)}
+.mk-row.on-light{background:#fff}
+.mk-lock{display:flex;align-items:center;gap:9px}
+.mk-word{font:700 15px var(--font-ui);letter-spacing:-.025em;color:var(--text)}
+.mk-row.on-light .mk-word{color:#16191d}
+.verdict{padding:16px;border:1px solid color-mix(in srgb,var(--accent) 34%,var(--line));
+  border-left:3px solid var(--accent);border-radius:10px;
+  background:color-mix(in srgb,var(--accent) 6%,var(--panel))}
+.verdict p{margin:0;font-size:13.5px;line-height:1.65}
+</style>
+</head>
+<body>
+<div class="ds">
+  <header class="ds-head">
+    <span class="ds-kicker">Four marks</span>
+    <h1>Logo directions</h1>
+    <p>The app has no mark today - a 6px accent dot stands in. Four directions, each shown as a lockup and at the two sizes that actually decide a logo.</p>
+  </header>
+
+  <section class="ds-block">
+    <span class="ds-label">Four marks &middot; lockup, 20px, 16px, on both grounds</span>
+    <div class="marks">
+      <div class="mk">
+      <span class="mk-name">Lanes</span>
+      <div class="mk-row">
+        <span class="mk-lock"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4"  y="12" width="4.5" height="16" rx="2.25" fill="var(--accent)" opacity=".45"/>
+      <rect x="11" y="6"  width="4.5" height="22" rx="2.25" fill="var(--accent)"/>
+      <rect x="18" y="15" width="4.5" height="13" rx="2.25" fill="var(--accent)" opacity=".7"/>
+      <rect x="25" y="19" width="4.5" height="9"  rx="2.25" fill="var(--accent)" opacity=".3"/>
+    </svg><span class="mk-word">omp-web</span></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4"  y="12" width="4.5" height="16" rx="2.25" fill="var(--accent)" opacity=".45"/>
+      <rect x="11" y="6"  width="4.5" height="22" rx="2.25" fill="var(--accent)"/>
+      <rect x="18" y="15" width="4.5" height="13" rx="2.25" fill="var(--accent)" opacity=".7"/>
+      <rect x="25" y="19" width="4.5" height="9"  rx="2.25" fill="var(--accent)" opacity=".3"/>
+    </svg><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4"  y="12" width="4.5" height="16" rx="2.25" fill="var(--accent)" opacity=".45"/>
+      <rect x="11" y="6"  width="4.5" height="22" rx="2.25" fill="var(--accent)"/>
+      <rect x="18" y="15" width="4.5" height="13" rx="2.25" fill="var(--accent)" opacity=".7"/>
+      <rect x="25" y="19" width="4.5" height="9"  rx="2.25" fill="var(--accent)" opacity=".3"/>
+    </svg></span>
+      </div>
+      <div class="mk-row on-light">
+        <span class="mk-lock"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4"  y="12" width="4.5" height="16" rx="2.25" fill="#2f66cc" opacity=".45"/>
+      <rect x="11" y="6"  width="4.5" height="22" rx="2.25" fill="#2f66cc"/>
+      <rect x="18" y="15" width="4.5" height="13" rx="2.25" fill="#2f66cc" opacity=".7"/>
+      <rect x="25" y="19" width="4.5" height="9"  rx="2.25" fill="#2f66cc" opacity=".3"/>
+    </svg><span class="mk-word">omp-web</span></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4"  y="12" width="4.5" height="16" rx="2.25" fill="#2f66cc" opacity=".45"/>
+      <rect x="11" y="6"  width="4.5" height="22" rx="2.25" fill="#2f66cc"/>
+      <rect x="18" y="15" width="4.5" height="13" rx="2.25" fill="#2f66cc" opacity=".7"/>
+      <rect x="25" y="19" width="4.5" height="9"  rx="2.25" fill="#2f66cc" opacity=".3"/>
+    </svg><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4"  y="12" width="4.5" height="16" rx="2.25" fill="#2f66cc" opacity=".45"/>
+      <rect x="11" y="6"  width="4.5" height="22" rx="2.25" fill="#2f66cc"/>
+      <rect x="18" y="15" width="4.5" height="13" rx="2.25" fill="#2f66cc" opacity=".7"/>
+      <rect x="25" y="19" width="4.5" height="9"  rx="2.25" fill="#2f66cc" opacity=".3"/>
+    </svg></span>
+      </div>
+      <span class="mk-note">Parallel sessions at different depths. Says what the app is for - many concurrent agents - rather than what it runs on. Reads at 16px and doubles as a status motif: bar heights could track real session states.</span>
+    </div>
+      <div class="mk">
+      <span class="mk-name">Orbit</span>
+      <div class="mk-row">
+        <span class="mk-lock"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="11" fill="none" stroke="var(--accent)" stroke-width="1.6" opacity=".34"/>
+      <circle cx="16" cy="16" r="4.2" fill="var(--accent)"/>
+      <circle cx="16" cy="5"  r="2.6" fill="var(--accent)"/>
+      <circle cx="25.5" cy="21.5" r="2.2" fill="var(--accent)" opacity=".72"/>
+      <circle cx="6.5"  cy="21.5" r="2.2" fill="var(--accent)" opacity=".45"/>
+    </svg><span class="mk-word">omp-web</span></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="11" fill="none" stroke="var(--accent)" stroke-width="1.6" opacity=".34"/>
+      <circle cx="16" cy="16" r="4.2" fill="var(--accent)"/>
+      <circle cx="16" cy="5"  r="2.6" fill="var(--accent)"/>
+      <circle cx="25.5" cy="21.5" r="2.2" fill="var(--accent)" opacity=".72"/>
+      <circle cx="6.5"  cy="21.5" r="2.2" fill="var(--accent)" opacity=".45"/>
+    </svg><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="11" fill="none" stroke="var(--accent)" stroke-width="1.6" opacity=".34"/>
+      <circle cx="16" cy="16" r="4.2" fill="var(--accent)"/>
+      <circle cx="16" cy="5"  r="2.6" fill="var(--accent)"/>
+      <circle cx="25.5" cy="21.5" r="2.2" fill="var(--accent)" opacity=".72"/>
+      <circle cx="6.5"  cy="21.5" r="2.2" fill="var(--accent)" opacity=".45"/>
+    </svg></span>
+      </div>
+      <div class="mk-row on-light">
+        <span class="mk-lock"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="11" fill="none" stroke="#2f66cc" stroke-width="1.6" opacity=".34"/>
+      <circle cx="16" cy="16" r="4.2" fill="#2f66cc"/>
+      <circle cx="16" cy="5"  r="2.6" fill="#2f66cc"/>
+      <circle cx="25.5" cy="21.5" r="2.2" fill="#2f66cc" opacity=".72"/>
+      <circle cx="6.5"  cy="21.5" r="2.2" fill="#2f66cc" opacity=".45"/>
+    </svg><span class="mk-word">omp-web</span></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="11" fill="none" stroke="#2f66cc" stroke-width="1.6" opacity=".34"/>
+      <circle cx="16" cy="16" r="4.2" fill="#2f66cc"/>
+      <circle cx="16" cy="5"  r="2.6" fill="#2f66cc"/>
+      <circle cx="25.5" cy="21.5" r="2.2" fill="#2f66cc" opacity=".72"/>
+      <circle cx="6.5"  cy="21.5" r="2.2" fill="#2f66cc" opacity=".45"/>
+    </svg><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="11" fill="none" stroke="#2f66cc" stroke-width="1.6" opacity=".34"/>
+      <circle cx="16" cy="16" r="4.2" fill="#2f66cc"/>
+      <circle cx="16" cy="5"  r="2.6" fill="#2f66cc"/>
+      <circle cx="25.5" cy="21.5" r="2.2" fill="#2f66cc" opacity=".72"/>
+      <circle cx="6.5"  cy="21.5" r="2.2" fill="#2f66cc" opacity=".45"/>
+    </svg></span>
+      </div>
+      <span class="mk-note">A controller with satellites: mission control made literal. Most distinctive, most likely to be mistaken for a generic AI or atom logo, and the weakest at 16px.</span>
+    </div>
+      <div class="mk">
+      <span class="mk-name">Caret</span>
+      <div class="mk-row">
+        <span class="mk-lock"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="27" height="27" rx="8" fill="none" stroke="var(--accent)" stroke-width="1.8" opacity=".55"/>
+      <path d="M11 11.5 16.5 16 11 20.5" fill="none" stroke="var(--accent)" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 21h4" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" opacity=".6"/>
+    </svg><span class="mk-word">omp-web</span></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="27" height="27" rx="8" fill="none" stroke="var(--accent)" stroke-width="1.8" opacity=".55"/>
+      <path d="M11 11.5 16.5 16 11 20.5" fill="none" stroke="var(--accent)" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 21h4" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" opacity=".6"/>
+    </svg><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="27" height="27" rx="8" fill="none" stroke="var(--accent)" stroke-width="1.8" opacity=".55"/>
+      <path d="M11 11.5 16.5 16 11 20.5" fill="none" stroke="var(--accent)" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 21h4" stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" opacity=".6"/>
+    </svg></span>
+      </div>
+      <div class="mk-row on-light">
+        <span class="mk-lock"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="27" height="27" rx="8" fill="none" stroke="#2f66cc" stroke-width="1.8" opacity=".55"/>
+      <path d="M11 11.5 16.5 16 11 20.5" fill="none" stroke="#2f66cc" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 21h4" stroke="#2f66cc" stroke-width="2.4" stroke-linecap="round" opacity=".6"/>
+    </svg><span class="mk-word">omp-web</span></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="27" height="27" rx="8" fill="none" stroke="#2f66cc" stroke-width="1.8" opacity=".55"/>
+      <path d="M11 11.5 16.5 16 11 20.5" fill="none" stroke="#2f66cc" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 21h4" stroke="#2f66cc" stroke-width="2.4" stroke-linecap="round" opacity=".6"/>
+    </svg><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="2.5" y="2.5" width="27" height="27" rx="8" fill="none" stroke="#2f66cc" stroke-width="1.8" opacity=".55"/>
+      <path d="M11 11.5 16.5 16 11 20.5" fill="none" stroke="#2f66cc" stroke-width="2.4"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M19 21h4" stroke="#2f66cc" stroke-width="2.4" stroke-linecap="round" opacity=".6"/>
+    </svg></span>
+      </div>
+      <span class="mk-note">A prompt in a pane. Instantly legible as a terminal tool and the safest choice, but it is the logo half the developer-tool category already uses.</span>
+    </div>
+      <div class="mk">
+      <span class="mk-name">Panes</span>
+      <div class="mk-row">
+        <span class="mk-lock"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4" y="4" width="11" height="11" rx="3" fill="var(--accent)"/>
+      <rect x="17" y="4" width="11" height="11" rx="3" fill="var(--accent)" opacity=".42"/>
+      <rect x="4" y="17" width="11" height="11" rx="3" fill="var(--accent)" opacity=".42"/>
+      <rect x="17" y="17" width="11" height="11" rx="3" fill="var(--accent)" opacity=".72"/>
+    </svg><span class="mk-word">omp-web</span></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4" y="4" width="11" height="11" rx="3" fill="var(--accent)"/>
+      <rect x="17" y="4" width="11" height="11" rx="3" fill="var(--accent)" opacity=".42"/>
+      <rect x="4" y="17" width="11" height="11" rx="3" fill="var(--accent)" opacity=".42"/>
+      <rect x="17" y="17" width="11" height="11" rx="3" fill="var(--accent)" opacity=".72"/>
+    </svg><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4" y="4" width="11" height="11" rx="3" fill="var(--accent)"/>
+      <rect x="17" y="4" width="11" height="11" rx="3" fill="var(--accent)" opacity=".42"/>
+      <rect x="4" y="17" width="11" height="11" rx="3" fill="var(--accent)" opacity=".42"/>
+      <rect x="17" y="17" width="11" height="11" rx="3" fill="var(--accent)" opacity=".72"/>
+    </svg></span>
+      </div>
+      <div class="mk-row on-light">
+        <span class="mk-lock"><svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4" y="4" width="11" height="11" rx="3" fill="#2f66cc"/>
+      <rect x="17" y="4" width="11" height="11" rx="3" fill="#2f66cc" opacity=".42"/>
+      <rect x="4" y="17" width="11" height="11" rx="3" fill="#2f66cc" opacity=".42"/>
+      <rect x="17" y="17" width="11" height="11" rx="3" fill="#2f66cc" opacity=".72"/>
+    </svg><span class="mk-word">omp-web</span></span>
+        <span style="margin-left:auto;display:flex;align-items:center;gap:10px">
+          <svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4" y="4" width="11" height="11" rx="3" fill="#2f66cc"/>
+      <rect x="17" y="4" width="11" height="11" rx="3" fill="#2f66cc" opacity=".42"/>
+      <rect x="4" y="17" width="11" height="11" rx="3" fill="#2f66cc" opacity=".42"/>
+      <rect x="17" y="17" width="11" height="11" rx="3" fill="#2f66cc" opacity=".72"/>
+    </svg><svg width="16" height="16" viewBox="0 0 32 32" aria-hidden="true">
+      <rect x="4" y="4" width="11" height="11" rx="3" fill="#2f66cc"/>
+      <rect x="17" y="4" width="11" height="11" rx="3" fill="#2f66cc" opacity=".42"/>
+      <rect x="4" y="17" width="11" height="11" rx="3" fill="#2f66cc" opacity=".42"/>
+      <rect x="17" y="17" width="11" height="11" rx="3" fill="#2f66cc" opacity=".72"/>
+    </svg></span>
+      </div>
+      <span class="mk-note">Four tiles at different weights - tmux panes, or sessions in a grid. Calm and structural; also the most anonymous, and close to several existing app icons.</span>
+    </div>
+    </div>
+  </section>
+
+  <section class="verdict">
+    <p><b>Recommendation: Lanes.</b> It is the only one of the four that means
+    something specific to this app, it survives 16px, it needs no gradient or
+    detail to read, and it extends: the same four bars can carry live status on
+    the tab favicon. Orbit is the more beautiful mark and the worse logo.</p>
+  </section>
+
+  <section class="ds-block">
+    <span class="ds-label">Where a mark has to work</span>
+    <p class="ds-note">Sidebar brand at 16px (today: a bare 6px accent dot before
+      the wordmark) &middot; browser tab favicon at 16px &middot; PWA icon at
+      192 and 512, which is where the current <code>icon.svg</code> lives
+      &middot; the iOS home-screen tile, where it sits on the user's wallpaper
+      and needs its own padded ground.</p>
+    <p class="ds-note">None of these are implemented yet. This card is the
+      choice, not the change.</p>
+  </section>
+
+</div>
+</body>
+</html>
