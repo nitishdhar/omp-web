@@ -5,6 +5,9 @@ node-pty, served as static files by a small Node server. There is no build step.
 Read `README.md` and `docs/architecture.md` first; UI work follows
 `docs/design-system/`.
 
+If an `AGENTS.local.md` exists next to this file, read it before starting. It
+holds the rules of the environment this checkout runs in and is never committed.
+
 ## Commands
 
 ```bash
