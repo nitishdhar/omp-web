@@ -30,7 +30,7 @@ export function initDom() {
     "menu-btn", "reload-btn", "update-btn", "usage-btn", "usage-popover",
     "profile-info-btn", "profile-info-popover", "profile-info-title", "profile-info-status",
     "profile-info-grid", "quickkeys-toggle", "notify-btn",
-    "usage-grid", "usage-status", "term", "term-wrap", "replay-loader", "session-search",
+    "usage-grid", "usage-status", "term", "term-wrap", "replay-loader", "terminal-empty", "session-search",
     "session-actions-toggle", "session-actions",
     "mode-toggle",
     "chat-mode", "chat-log", "chat-panels-toggle", "chat-panels-content",

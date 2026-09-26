@@ -14,6 +14,11 @@
 .content-host { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 #term-wrap { position: relative; flex: 1; min-height: 0; background: var(--term-bg); padding: 6px; touch-action: none; overflow: hidden; }
 #term { width: 100%; height: 100%; }
+/* Pooled hosts: one absolute overlay per recent session inside #term-wrap
+   padding (6px). Inactive use visibility:hidden + pointer-events:none (never
+   display:none) so a parked xterm stays measurable for fit(). */
+.term-entry { position: absolute; inset: 6px; }
+.term-entry .xterm { width: 100%; height: 100%; }
 /* Replay cover: shown while a fresh attach replays scrollback behind a hidden
    canvas, so a reload lands at the tail instead of sweeping down from the top.
    Bars reuse the chat shimmer; pointer-events none so input still lands. */
@@ -27,12 +32,13 @@
   visibility: hidden;
   pointer-events: none;
 }
-
-
 .terminal-empty {
   display: grid; place-items: center; align-content: center; gap: 10px; min-height: 100%;
   padding: 32px; text-align: center; color: var(--muted);
 }
+/* Explicit empty handling (pooled N hosts): shown iff no active entry via the
+   hidden attribute. Author display:grid beats UA [hidden], so re-assert it. */
+.terminal-empty[hidden] { display: none !important; }
 .terminal-empty h1 { margin: 0; color: var(--text); font: 600 21px var(--font-ui); letter-spacing: -.02em; }
 .terminal-empty p { max-width: 380px; margin: 0; font: 13.5px/1.6 var(--font-ui); }
 .terminal-empty-kicker { color: var(--muted); font: 590 12px var(--font-ui) !important; }

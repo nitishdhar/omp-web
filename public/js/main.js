@@ -6,6 +6,7 @@ import { el, initDom } from "./dom.js";
 import { api } from "./api.js";
 import { captureUrlToken, wireAuth, showAuth } from "./auth.js";
 import * as terminal from "./terminal.js";
+import * as pool from "./terminal-pool.js";
 import * as modals from "./modals.js";
 import { wireQuickkeys, activateQuickkeysSession, resetQuickkeysSession } from "./quickkeys.js";
 import { wireUsage } from "./usage.js";
@@ -42,21 +43,25 @@ let refreshing = false;
 
 // Ghost detail: a dead session previewed in the main pane. Selecting a ghost
 // is mutually exclusive with a live session — the terminal and chat poll both
-// stop, and the detail view (restore + full folder/type/history) takes over.
 function clearGhostView() {
   if (!state.selectedGhost && !el.main.classList.contains("ghost-active")) return;
   state.selectedGhost = null;
   ghost.hideGhost();
   applyMode(state.mode);
+  // Parked live entry survived the ghost preview (socket + buffer intact):
+  // reactivate its host, header, and scrubber. No replay — instant.
+  if (state.current && !pool.activeEntryId() && pool.hasEntry(state.current)) {
+    terminal.reactivateEntry(state.current);
+  }
   emit("sidebar:rerender");
 }
-
 function selectGhost(id) {
   const item = state.restorable.find((g) => g.id === id);
   if (!item) return;
   closeFileViewer();
   chat.resetChat();
-  terminal.showEmpty();
+  // Park: host hidden, socket + buffer survive for instant restore.
+  if (state.current) pool.parkEntry(state.current);
   activateQuickkeysSession(null);
   state.selectedGhost = id;
   // resetChat() ran above with no ghost selected, which leaves the landing
@@ -189,9 +194,10 @@ async function refresh() {
       clearGhostView();
     }
     if (state.current && !sessions.find((s) => s.id === state.current)) {
+      const vanished = state.current;
       closeFileViewer();
       chat.resetChat();
-      terminal.showEmpty();
+      terminal.removeSessionView(vanished);
       activateQuickkeysSession(null);
       el["mode-toggle"].hidden = false;
     }
@@ -255,13 +261,10 @@ async function killSession(id) {
   if (!confirm(`Kill this session? Its ${runtime} ends and cannot be revived.`)) return;
   try {
     await api(`/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
-    const ws = state.sockets.get(id);
-    state.sockets.delete(id);
-    ws?.close();
-    if (state.current === id) {
+    terminal.removeSessionView(id);
+    if (state.current === null) {
       closeFileViewer();
       chat.resetChat();
-      terminal.showEmpty();
       activateQuickkeysSession(null);
       el["mode-toggle"].hidden = false;
     }
@@ -499,9 +502,8 @@ el["r-reload"].onclick = () => modals.doReloadProfile({
     resetQuickkeysSession(session.id);
     chat.resetChatSession(session.id);
     syncProfileInfo(session.profile || "default");
-    if (state.current === session.id) {
-      terminal.resetTerm();
-    }
+    // Per-entry reset + cover on the reloaded id only; siblings untouched.
+    terminal.resetTerm(session.id);
     showNotice(`Reloaded under ${session.profile || "default"}`);
     refresh();
   },
