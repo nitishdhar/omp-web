@@ -173,6 +173,24 @@ WantedBy=default.target
 
 Enable it with `systemctl --user enable --now omp-web`.
 
+## Install from a release
+
+Download the tarball attached to the
+[latest release](https://github.com/nitishdhar/omp-web/releases/latest),
+then install it globally:
+
+```sh
+curl -fsSLO https://github.com/nitishdhar/omp-web/releases/download/v0.3.0/omp-web-0.3.0.tgz
+npm install --global ./omp-web-0.3.0.tgz
+omp-web doctor
+omp-web setup
+omp-web
+```
+
+Use the version attached to the release you are installing if it differs.
+Registry-style commands such as `npm install -g omp-web` are intentionally
+unsupported: releases are the only distribution.
+
 ## Local tarball installation
 
 `npm pack` makes a shareable local installer; it is the path for a recipient
@@ -183,19 +201,15 @@ checked-out project:
 npm pack
 ```
 
-Transfer the resulting `omp-web-0.2.10.tgz` by a method appropriate for the
+Transfer the resulting `omp-web-0.3.0.tgz` by a method appropriate for the
 recipient, then on that recipient's machine:
 
 ```sh
-npm install --global /path/to/omp-web-0.2.10.tgz
+npm install --global /path/to/omp-web-0.3.0.tgz
 omp-web doctor
 omp-web setup
 omp-web
 ```
-
-Use the filename that `npm pack` prints if the version differs. Registry-style
-commands such as `npm install -g omp-web` are intentionally unsupported until
-there is an explicit public release.
 
 ## Configuration and optional features
 
