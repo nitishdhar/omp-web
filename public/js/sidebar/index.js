@@ -10,6 +10,14 @@ import { wireSidebarResize } from "./resize.js";
 let searchQuery = "";
 let searchWired = false;
 
+// Next midnight boundary, for main.js bucket-rollover scheduling. Moved
+// verbatim from the retired sidebar/activity.js (Recent view).
+export function nextActivityBoundaryAt(now) {
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  return midnight.getTime();
+}
+
 export function renderKey(sessions) {
   // Every section now sorts by a stable key, so a session's `lastActivity`
   // bumping no longer changes row order — leaving it in the key only forced

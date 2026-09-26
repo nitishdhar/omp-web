@@ -7,7 +7,7 @@ import { api } from "./api.js";
 import { escapeHtml } from "./dom.js";
 import { lastChoice, rememberChoice, requestSession, selectFolder } from "./new-session.js";
 
-function folderOptions(selected) {
+function folderOptions() {
   const folders = [{ name: "Workspace", path: state.meta.workspaceRoot }, ...state.meta.folders];
   return folders.map((f) =>
     `<option value="${escapeHtml(f.path)}">${escapeHtml(f.name)}</option>`).join("");

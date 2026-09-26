@@ -1,6 +1,6 @@
 # omp-web
 
-`omp-web` is a localhost web console for a single Mac user who already uses
+`omp-web` is a localhost web console for a single user on their own machine who already uses
 [OMP](https://omp.sh/). It runs the native `omp` terminal inside its own tmux
 server, so the Terminal view is the real OMP TUI. The optional Chat view is a
 projection of that same session's transcript; it never starts a competing
@@ -11,11 +11,11 @@ installation listens at `http://127.0.0.1:7799`.
 
 ## Requirements
 
-- macOS and Node.js **22 or newer**
+- macOS or Linux, and Node.js **22 or newer**
 - `tmux`
 - OMP (`omp`) on your shell `PATH`
 
-Install Node with your preferred macOS toolchain and confirm it is Node 22+:
+Install Node with your preferred toolchain and confirm it is Node 22+:
 
 ```sh
 node --version
@@ -25,6 +25,14 @@ For tmux, Homebrew users can run:
 
 ```sh
 brew install tmux
+```
+
+On Linux, use the system package manager instead:
+
+```sh
+sudo apt install tmux
+# or
+sudo dnf install tmux
 ```
 
 If OMP is not installed yet, use one of the methods in the
@@ -56,12 +64,14 @@ npm run setup
 npm start
 ```
 
-Open `http://127.0.0.1:7799` in the same Mac user's browser. On the first
-visit, copy the default private token to the macOS clipboard without printing
+Open `http://127.0.0.1:7799` in the same user's browser on that machine. On the first
+visit, copy the default private token to the clipboard without printing
 it:
 
 ```sh
-pbcopy < "${OMP_WEB_HOME:-$HOME/.omp-web}/token"
+pbcopy < "${OMP_WEB_HOME:-$HOME/.omp-web}/token" # macOS
+xclip -selection clipboard < "${OMP_WEB_HOME:-$HOME/.omp-web}/token" # Linux (X11)
+wl-copy < "${OMP_WEB_HOME:-$HOME/.omp-web}/token" # Linux (Wayland)
 ```
 
 Paste it into the browser's **Enter access token** dialog and select
@@ -132,27 +142,49 @@ such as `python` and `speech`. It is not an account or profile command.
 | --- | --- |
 | `omp-web` | Start the localhost server in the foreground. |
 | `omp-web start` | Same as bare `omp-web`. |
-| `omp-web doctor` | Report macOS, Node, tmux, OMP, workspace, and node-pty prerequisites without starting sessions or reading/changing native OMP credentials or profiles. |
+| `omp-web doctor` | Report platform, Node, tmux, OMP, workspace, and node-pty prerequisites without starting sessions or reading/changing native OMP credentials or profiles. |
 | `omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login]` | Set up only omp-web and optionally hand off to native OMP. |
 | `omp-web --help` | Show command help. |
 | `npm start` | Start the server directly from a source checkout. |
 | `npm run doctor` / `npm run setup` | Source-checkout equivalents of the CLI commands. |
 
 The server remains attached to the foreground terminal. It does not create,
-load, modify, or remove a launchd job.
+load, modify, or remove a launchd job on macOS, nor a systemd unit on Linux.
+A minimal Linux user-unit equivalent, managed entirely by you. Use
+`command -v npm` for the `ExecStart` path (nvm/fnm shims are not on systemd's
+`PATH`) and your checkout for `WorkingDirectory`:
+
+```ini
+# ~/.config/systemd/user/omp-web.service
+[Unit]
+Description=omp-web localhost console
+
+[Service]
+WorkingDirectory=/path/to/omp-web
+ExecStart=/path/to/npm start
+# The tmux server shares this unit's cgroup: the default control-group mode
+# would take live sessions down on every stop, restart, or crash-restart.
+KillMode=process
+Restart=on-failure
+
+[Install]
+WantedBy=default.target
+```
+
+Enable it with `systemctl --user enable --now omp-web`.
 
 ## Local tarball installation
 
 `npm pack` makes a shareable local installer; it is the path for a recipient
-who does not have access to the source repository. On a Mac with the checked
-out project:
+who does not have access to the source repository. On a machine with the
+checked-out project:
 
 ```sh
 npm pack
 ```
 
 Transfer the resulting `omp-web-0.2.10.tgz` by a method appropriate for the
-recipient, then on that recipient's Mac:
+recipient, then on that recipient's machine:
 
 ```sh
 npm install --global /path/to/omp-web-0.2.10.tgz
@@ -188,7 +220,7 @@ both take precedence over the application default.
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux socket label. |
 | `OMP_WEB_TOKEN` | generated local token, unless explicitly supplied | Access token. Setup preserves an existing file and does not create one when this variable is set. Keep it private; do not commit or share it. |
 | `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
-| `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this Mac and sent only to the configured transcription service. |
+| `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this machine and sent only to the configured transcription service. |
 | `OMP_WEB_TRANSCRIBE_MODEL` | empty | Transcription model name. |
 
 **Profile information** is projected from each native OMP profile's
@@ -246,7 +278,7 @@ them.
 
 ## Security boundary
 
-omp-web is for **one trusted OS user on one Mac**. It protects its localhost
+omp-web is for **one trusted OS user on one machine**. It protects its localhost
 HTTP and WebSocket endpoints with the private token created during setup, but
 it is not a sandbox, multi-user system, or remote-access product. Anyone who
 can use that OS account and obtain the token can control the exposed tmux/OMP

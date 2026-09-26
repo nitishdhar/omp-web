@@ -16,7 +16,6 @@ export const state = {
   current: null, // active session id
   sockets: new Map(), // id -> ws (only current kept open)
   selectedFolder: "",
-  view: localStorage.getItem("omp_web_view") === "activity" ? "activity" : "projects",
   // Chat is the primary surface for agent sessions; Terminal is the
   // full-fidelity escape hatch. Only an explicit preference selects it.
   mode: localStorage.getItem("omp_web_mode") === "terminal" ? "terminal" : "chat",
@@ -30,11 +29,6 @@ export function setCurrent(id) {
     if (id) localStorage.setItem("omp_web_current", id);
     else localStorage.removeItem("omp_web_current");
   } catch {}
-}
-
-export function setView(v) {
-  state.view = v;
-  try { localStorage.setItem("omp_web_view", v); } catch {}
 }
 
 export function setMode(m) {
