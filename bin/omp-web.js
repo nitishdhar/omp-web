@@ -18,19 +18,20 @@ function usage() {
   console.log(`Usage: omp-web [start]
        omp-web doctor
        omp-web recover --list
-       omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login]
+       omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login] [--token]
 
 Commands:
   start       Run omp-web in the foreground (the default command).
   doctor      Check local prerequisites without starting sessions.
   recover     List transcript-backed session candidates after tmux-server loss.
               Never recreates sessions; explicit review only.
-  setup       Create omp-web's private token and configure a workspace.
+  setup       Configure a workspace, and with --token create a private access token.
 
 Setup options:
   --workspace PATH    Existing folder root shown by the project picker.
   --profile NAME      Native OMP profile to use for an optional login handoff.
   --skip-omp-login    Do not offer the interactive native OMP handoff.
+  --token             Create a private access token and require it (open console otherwise).
   -h, --help          Show this help.
 `);
 }
@@ -332,6 +333,15 @@ function doctor() {
   } else {
     healthy = check(process.platform === "darwin", "macOS", process.platform) && healthy;
   }
+  // Token is opt-in: no token means an open console, acceptable on loopback
+  // only (the server refuses to start open on a LAN address).
+  if (config.token) {
+    healthy = check(true, "authentication", "access token required") && healthy;
+  } else if (config.host === "127.0.0.1" || config.host === "::1" || config.host === "localhost") {
+    console.log(`WARN authentication — no access token (open console on ${config.host}; setup --token to require one)`);
+  } else {
+    healthy = check(false, "authentication", `no token with non-loopback bind ${config.host} — server will refuse to start`) && healthy;
+  }
   const nodeMajor = Number(process.versions.node.split(".")[0]);
   healthy = check(
     nodeMajor >= MINIMUM_NODE_MAJOR,
@@ -385,6 +395,8 @@ function parseSetupArgs(args) {
     const arg = args[index];
     if (arg === "--skip-omp-login") {
       options.skipOmpLogin = true;
+    } else if (arg === "--token") {
+      options.token = true;
     } else if (arg === "--workspace" || arg === "--profile") {
       const value = args[++index];
       if (!value || value.startsWith("-")) throw new Error(`${arg} needs a value`);
@@ -435,9 +447,13 @@ function usingEnvironmentToken() {
 }
 
 function authenticationInstruction() {
-  return usingEnvironmentToken()
-    ? "Authentication uses configured OMP_WEB_TOKEN; its value is not displayed."
-    : `Authentication token file: ${config.tokenFile}`;
+  if (usingEnvironmentToken()) {
+    return "Authentication uses configured OMP_WEB_TOKEN; its value is not displayed.";
+  }
+  try {
+    if (fs.readFileSync(config.tokenFile, "utf8").trim()) return `Authentication token file: ${config.tokenFile}`;
+  } catch {}
+  return "No access token — console is OPEN to the local machine (setup --token to require one).";
 }
 
 function createToken() {
@@ -573,7 +589,7 @@ async function setup(args) {
   let effectiveWorkspace;
   try {
     createPrivateDirectory(config.ompWebHome);
-    createToken();
+    if (options.token) createToken();
     effectiveWorkspace = addWorkspaceIfMissing(workspace);
   } catch (error) {
     fail(error.message);

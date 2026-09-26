@@ -300,20 +300,23 @@ the bottom. Terminal copy-mode/history scrolling is independent.
 
 ## Auth model
 
-- A token from `OMP_WEB_TOKEN` or the configured omp-web home's `token` file
-  is required before the server listens. Setup creates a private token file;
-  neither the server startup log nor doctor prints its value.
+- Auth is opt-in: a token from `OMP_WEB_TOKEN` or the home's `token` file
+  (`setup --token` creates one) is required on `/api` and `/ws` only when
+  configured. With no token the console runs OPEN on loopback, and the server
+  refuses to start open on a non-loopback bind. Neither the startup log nor
+  doctor prints a token value.
 - **Static shell is public** (no secrets); **`/api` and `/ws` require the
-  token**. The browser's REST wrapper sends `x-omp-web-token` and never puts
-  credentials in API URLs. The WebSocket uses `?token=` because browser
-  WebSocket construction cannot set custom headers; the server accepts either
-  query or header at the gate.
+  token when one is configured**. The browser's REST wrapper sends `x-omp-web-token`
+  and never puts credentials in API URLs. The WebSocket uses `?token=` because
+  browser WebSocket construction cannot set custom headers; the server accepts
+  either query or header at the gate.
 - The client persists the token in `localStorage` (per-origin) and drops the
   one-time `?token=` bootstrap value from the address bar. A 401 shows the
-  token-prompt gate.
+  token-prompt gate (unreachable in open mode).
 - Browser API requests and WebSocket upgrades reject an Origin whose host
-  differs from the request Host. Native clients without Origin still require
-  the token. Reverse proxies must preserve the public Host header.
+  differs from the request Host. Native clients without Origin require the
+  token when one is configured. Reverse proxies must preserve the public Host
+  header.
 - This is trusted-owner access to a host shell, not a sandbox or multi-user
   service. Non-local use requires a trusted private network or secured HTTPS
   proxy. Provider credentials stay with OMP, not the browser.
