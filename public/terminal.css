@@ -271,16 +271,19 @@
 .mode-switch[hidden] { display: none; }
 .mode-seg {
   display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 10px;
+  flex: none; line-height: 1;
   border: 0; border-radius: 7px; background: transparent; color: var(--muted);
   font: 12.5px var(--font-ui);
 }
-.mode-seg svg { width: 15px; height: 15px; }
+.mode-seg svg { width: 15px; height: 15px; display: block; flex: none; }
 .mode-seg[aria-pressed="true"] { background: var(--accent-2); color: #fff; }
 @media (max-width: 720px) {
   .mode-seg-label { display: none; }
-  /* The switch as a whole is the 44px touch target; taller segments push the
-     header past its budget. */
-  .mode-seg { min-height: 38px; padding-inline: 12px; }
+  /* Match the 38px header siblings (usage-trigger, icon-action): the switch
+     reads as one control among them instead of a full-height block. The 38px
+     ghost buttons elsewhere in this header already set the precedent that
+     header controls sit under the 44px app-wide touch target. */
+  .mode-seg { min-height: 32px; padding-inline: 10px; }
 }
 .usage-trigger, .profile-info-trigger { display: inline-grid; place-items: center; flex: none; width: 38px; min-height: 38px; padding: 0; color: var(--muted); }
 .usage-trigger-mark { display: grid; place-items: center; }

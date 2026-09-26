@@ -278,11 +278,3 @@ function openGhostMenu(anchor, ghost) {
     { label: "Profile", value: ghost.type === "shell" ? "shell" : (ghost.profile || "default") },
   ]);
 }
-
-export function activityRow(session, options = {}) {
-  // Recent mixes projects, so its rows need identity most — and they were the
-  // rows getting it least: the inline folder chip took fixed width from the
-  // title while folder, profile and age hid in a hover tooltip that does not
-  // exist on touch. The second line carries all three instead.
-  return buildSessionRow(session, { ...options, showFolder: false, narrow: false });
-}

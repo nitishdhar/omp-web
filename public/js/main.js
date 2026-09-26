@@ -13,7 +13,7 @@ import { wireProfileInfo, syncProfileInfo } from "./profile-info.js";
 import { wireLinkModal } from "./linkshare.js";
 import * as sidebar from "./sidebar/index.js";
 import { markSessionSeen } from "./sidebar/rows.js";
-import { nextActivityBoundaryAt } from "./sidebar/activity.js";
+import { nextActivityBoundaryAt } from "./sidebar/index.js";
 import * as chat from "./chat.js";
 import * as ghost from "./ghost.js";
 import { wirePalette } from "./palette.js";
