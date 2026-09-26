@@ -25,7 +25,7 @@ let scrollPump = Promise.resolve(), deferredScrollInputs = [], deferredInputByte
 let scrollExitCallbacks = [];
 let currentScrollState = { history: 0, position: 0, inMode: false };
 let outputQueue = [], outputWriteActive = false;
-let replayHidden = false, replayTimer = null, replayWrites = 0;
+let replayHidden = false, replayTimer = null, replayWrites = 0, replayDeadline = 0;
 const intentionalSockets = new WeakSet();
 const failedSockets = new WeakSet();
 const nonRetrySockets = new WeakSet();
@@ -75,21 +75,31 @@ export function resetTerm() {
   outputQueue.push({ reset: true });
   replayHidden = true;
   replayWrites = 0;
+  // Debounced reveal: every landed batch pushes the quiet-reveal out, so a
+  // slow multi-second replay stays parked; the absolute cap bounds it for
+  // sessions that never go quiet.
+  replayDeadline = Date.now() + REPLAY_MAX_MS;
+  armReplayTimer();
   const generation = connectionGeneration;
   if (el.term) el.term.style.visibility = "hidden";
+  pumpOutputQueue();
+}
+
+function armReplayTimer() {
   clearTimeout(replayTimer);
+  const wait = Math.min(REPLAY_REVEAL_MS, Math.max(0, replayDeadline - Date.now()));
+  const generation = connectionGeneration;
   replayTimer = setTimeout(() => {
     if (generation === connectionGeneration) revealReplay();
-  }, REPLAY_REVEAL_MS);
-  pumpOutputQueue();
+  }, wait);
 }
 
 // A fresh attach replays scrollback from an empty buffer; xterm follows the
 // tail progressively, which reads as the view sweeping down from the top on
-// every reload. Park the canvas hidden until the first burst drains (or a
-// bounded timeout, for sessions that never go quiet), then reveal at the tail.
+// every reload. Park the canvas hidden until the replay burst drains.
 // visibility:hidden keeps layout so fitting still measures correctly.
 const REPLAY_REVEAL_MS = 1200;
+const REPLAY_MAX_MS = 8000;
 function revealReplay() {
   if (!replayHidden) return;
   replayHidden = false;
@@ -100,8 +110,6 @@ function revealReplay() {
 
 export function showEmpty() {
   const id = state.current;
-  if (id && scrolling && !scrollExitPending) requestScrollExit(id);
-  else clearScrollIntent();
   clearTimeout(reconnectTimer);
   reconnectAttempt = 0;
   connectionGeneration++;
@@ -623,6 +631,7 @@ function pumpOutputQueue() {
     }
     if (consumed) outputQueue.splice(0, consumed);
     replayWrites++;
+    if (replayHidden) armReplayTimer();
     outputWriteActive = true;
     try {
       term.write(text, () => {
