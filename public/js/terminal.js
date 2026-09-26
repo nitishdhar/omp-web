@@ -25,7 +25,7 @@ let scrollPump = Promise.resolve(), deferredScrollInputs = [], deferredInputByte
 let scrollExitCallbacks = [];
 let currentScrollState = { history: 0, position: 0, inMode: false };
 let outputQueue = [], outputWriteActive = false;
-let replayHidden = false, replayTimer = null;
+let replayHidden = false, replayTimer = null, replayWrites = 0;
 const intentionalSockets = new WeakSet();
 const failedSockets = new WeakSet();
 const nonRetrySockets = new WeakSet();
@@ -74,6 +74,7 @@ export function resetTerm() {
   if (!term) return;
   outputQueue.push({ reset: true });
   replayHidden = true;
+  replayWrites = 0;
   const generation = connectionGeneration;
   if (term.element) term.element.style.visibility = "hidden";
   clearTimeout(replayTimer);
@@ -621,6 +622,7 @@ function pumpOutputQueue() {
       consumed++;
     }
     if (consumed) outputQueue.splice(0, consumed);
+    replayWrites++;
     outputWriteActive = true;
     try {
       term.write(text, () => {
@@ -635,7 +637,9 @@ function pumpOutputQueue() {
     }
     return;
   }
-  revealReplay();
+  // The reset-only drain (no output arrived yet) must not reveal: the replay
+  // hasn't started, and showing the empty canvas is the top-flash itself.
+  if (replayWrites > 0) revealReplay();
 }
 
 function enqueueOutput(text, ws, id, generation, bytes = 0) {
