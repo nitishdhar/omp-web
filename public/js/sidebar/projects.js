@@ -295,17 +295,16 @@ export function render(host, sessions, { onOpen, ghosts = [] } = {}) {
     .sort(stableCreatedOrder);
   const pinnedSection = sessionSection("Pinned", "pinned-section", pinned, onOpen);
   if (pinnedSection) host.append(pinnedSection);
-  for (const session of pinned) sidelined.add(session.id);
 
   // Every workspace folder is listed, not only the ones with a live session:
   // the sidebar is also where you pick a project to start in, and folders
   // vanishing as their last session ended read as data loss.
   for (const folder of folders) {
-    // A session lives in exactly one place: an attention/pinned section wins
-    // over its folder. Listing it twice made the sidebar look twice as full as
-    // it was and left the folder counts lying.
+    // Waiting/working sessions hoist out of their folders; pinned ones stay
+    // put as well as listing under Pinned, so a pinned row never vanishes
+    // from its project.
     const rows = folder.sessions
-      .filter((session) => !sidelined.has(session.id))
+      .filter((session) => !sidelined.has(session.id) || session.pinned)
       .sort(stableCreatedOrder);
     // Not-running sessions belong to their folder too; the count is every
     // session the folder lists, live or not.

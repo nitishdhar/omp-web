@@ -42,21 +42,25 @@ let refreshing = false;
 
 // Ghost detail: a dead session previewed in the main pane. Selecting a ghost
 // is mutually exclusive with a live session — the terminal and chat poll both
-// stop, and the detail view (restore + full folder/type/history) takes over.
 function clearGhostView() {
   if (!state.selectedGhost && !el.main.classList.contains("ghost-active")) return;
   state.selectedGhost = null;
   ghost.hideGhost();
   applyMode(state.mode);
+  // The parked live entry survived the preview (socket + buffer intact):
+  // resume its host, header and scrubber with no replay, or fall back to
+  // the empty chrome when it was disposed while parked.
+  terminal.resumeCurrent();
   emit("sidebar:rerender");
 }
-
 function selectGhost(id) {
   const item = state.restorable.find((g) => g.id === id);
   if (!item) return;
   closeFileViewer();
   chat.resetChat();
-  terminal.showEmpty();
+  // Park the live session: socket + buffer survive, chrome hides, current
+  // clears so header actions and the poll stop targeting a hidden session.
+  terminal.parkCurrent();
   activateQuickkeysSession(null);
   state.selectedGhost = id;
   // resetChat() ran above with no ghost selected, which leaves the landing
@@ -189,12 +193,16 @@ async function refresh() {
       clearGhostView();
     }
     if (state.current && !sessions.find((s) => s.id === state.current)) {
+      const vanished = state.current;
       closeFileViewer();
       chat.resetChat();
-      terminal.showEmpty();
+      terminal.removeSessionView(vanished);
       activateQuickkeysSession(null);
       el["mode-toggle"].hidden = false;
     }
+    // Pooled background entries killed elsewhere keep a terminal, host node
+    // and LRU slot until evicted — dispose them here instead.
+    terminal.pruneSessions(sessions);
   } catch (e) {
     el["side-foot"].textContent = "offline: " + e.message;
   } finally {
@@ -204,6 +212,11 @@ async function refresh() {
 
 
 async function boot() {
+  // PWA install prompt needs a service worker (sw.js caches nothing — it only
+  // satisfies the installability check). Fails silently off secure contexts.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
   try {
     state.meta = await api("/meta");
     state.selectedFolder = state.selectedFolder || state.meta.workspaceRoot;
@@ -249,14 +262,12 @@ async function killSession(id) {
     : "OMP process";
   if (!confirm(`Kill this session? Its ${runtime} ends and cannot be revived.`)) return;
   try {
+    const wasCurrent = state.current === id;
     await api(`/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
-    const ws = state.sockets.get(id);
-    state.sockets.delete(id);
-    ws?.close();
-    if (state.current === id) {
+    terminal.removeSessionView(id);
+    if (wasCurrent) {
       closeFileViewer();
       chat.resetChat();
-      terminal.showEmpty();
       activateQuickkeysSession(null);
       el["mode-toggle"].hidden = false;
     }
@@ -494,9 +505,8 @@ el["r-reload"].onclick = () => modals.doReloadProfile({
     resetQuickkeysSession(session.id);
     chat.resetChatSession(session.id);
     syncProfileInfo(session.profile || "default");
-    if (state.current === session.id) {
-      terminal.resetTerm();
-    }
+    // Per-entry reset + cover on the reloaded id only; siblings untouched.
+    terminal.resetTerm(session.id);
     showNotice(`Reloaded under ${session.profile || "default"}`);
     refresh();
   },

@@ -14,7 +14,7 @@ export const state = {
   restorable: [],
   selectedGhost: null, // ghost id with its detail view open in the main pane
   current: null, // active session id
-  sockets: new Map(), // id -> ws (only current kept open)
+  sockets: new Map(), // id -> ws (one open socket per pooled entry, LRU-capped)
   selectedFolder: "",
   // Chat is the primary surface for agent sessions; Terminal is the
   // full-fidelity escape hatch. Only an explicit preference selects it.
