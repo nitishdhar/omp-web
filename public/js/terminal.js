@@ -76,7 +76,7 @@ export function resetTerm() {
   replayHidden = true;
   replayWrites = 0;
   const generation = connectionGeneration;
-  if (term.element) term.element.style.visibility = "hidden";
+  if (el.term) el.term.style.visibility = "hidden";
   clearTimeout(replayTimer);
   replayTimer = setTimeout(() => {
     if (generation === connectionGeneration) revealReplay();
@@ -94,7 +94,7 @@ function revealReplay() {
   if (!replayHidden) return;
   replayHidden = false;
   clearTimeout(replayTimer);
-  if (term?.element) term.element.style.visibility = "";
+  if (el.term) el.term.style.visibility = "";
   try { term?.scrollToBottom(); } catch {}
 }
 
