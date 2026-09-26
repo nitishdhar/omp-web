@@ -4,3 +4,4 @@ node_modules/
 .omp-web/
 *.tgz
 releases/
+AGENTS.local.md
