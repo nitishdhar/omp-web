@@ -48,7 +48,6 @@ function disposeEntryResources(entry) {
     if (state.sockets.get(entry.id) === ws) state.sockets.delete(entry.id);
     try { ws.close(); } catch {}
   }
-  entry.ws = null;
   clearTimeout(entry.replay.timer);
   entry.replay.hidden = false;
   entry.outQueue.length = 0;
@@ -80,7 +79,10 @@ function ensureGlobalWiring() {
     // Rotation must refit even in chat mode: the layer keeps real dimensions
     // under the overlay, and a portrait-sized canvas would otherwise paint
     // past its landscape box (pure-black strip with stale TUI text).
-    fitAll({ force: true });
+    // Active entry only: each pooled socket is its own tmux attach client and
+    // the server uses window-size latest, so a background resize would reflow
+    // sessions the user isn't viewing. Entries fit on activation instead.
+    doFit({ force: true });
   });
 }
 
@@ -105,7 +107,12 @@ function ensureTermFor(entry) {
   entry.term = term;
   entry.fit = fit;
   wireCompactFocusGuardFor(entry);
-  term.onData((d) => send({ t: "i", d }));
+  // Parked terminals produce data too (tmux DA1/DA2/XTVERSION and OSC 10/11
+  // queries on every attach): route each entry's bytes to its own socket so
+  // background replies never land in the active pane as typed input.
+  term.onData((d) => entry.id === state.current
+    ? send({ t: "i", d })
+    : sendQuiet({ t: "i", d }, entry.id));
   return term;
 }
 
@@ -116,7 +123,9 @@ export function getTerm() {
 // Per-entry first-paint cover. Loader + host hiding apply only when the entry
 // is active; background entries stream silently with no cover.
 export function resetTerm(id = state.current) {
-  const entry = id ? entryFor(id) ?? pool.getEntry(id) : active();
+  // Peek only: creating here would add a host, touch the LRU and possibly
+  // evict a live entry — then return with no terminal and no socket.
+  const entry = id ? entryFor(id) : active();
   if (!entry?.term) return;
   entry.outQueue.push({ reset: true });
   entry.replay.hidden = true;
@@ -136,10 +145,14 @@ export function resetTerm(id = state.current) {
 function armReplayTimer(entry) {
   if (!entry) return;
   clearTimeout(entry.replay.timer);
-  const wait = Math.min(REPLAY_REVEAL_MS, Math.max(0, entry.replay.deadline - Date.now()));
+  // Debounce on the quiet constant: every landed batch pushes reveal out by
+  // one quiet spell, so a steady replay stays covered and a drained one shows
+  // ~400 ms after its last batch instead of 1.2 s later. The absolute cap
+  // bounds sessions that never go quiet.
+  const wait = Math.min(REPLAY_QUIET_MS, Math.max(0, entry.replay.deadline - Date.now()));
   const generation = entry.generation;
   entry.replay.timer = setTimeout(() => {
-    if (generation === entry.generation) revealReplay(entry, "timeout");
+    if (generation === entry.generation) revealReplay(entry);
   }, wait);
 }
 
@@ -147,10 +160,9 @@ function armReplayTimer(entry) {
 // tail progressively, which reads as the view sweeping down from the top on
 // every reload. Park the canvas hidden until the replay burst drains.
 // visibility:hidden keeps layout so fitting still measures correctly.
-const REPLAY_REVEAL_MS = 1200;
-const REPLAY_MAX_MS = 8000;
+const REPLAY_MAX_MS = 4000;
 const REPLAY_QUIET_MS = 400;
-function revealReplay(entry, why = "drain") {
+function revealReplay(entry) {
   if (!entry || !entry.replay.hidden) return;
   entry.replay.hidden = false;
   clearTimeout(entry.replay.timer);
@@ -160,16 +172,13 @@ function revealReplay(entry, why = "drain") {
   if (entry.host) entry.host.style.visibility = "";
   if (el["replay-loader"]) el["replay-loader"].hidden = true;
   try { entry.term?.scrollToBottom(); } catch {}
+  // The covered socket opened before first output, so onopen's focus ran on
+  // a hidden textarea and did nothing — retry here (desktop only, as before).
+  if (!window.matchMedia("(max-width: 1099px)").matches) focusTerminal();
 }
 
-// Empty view shown iff no active entry (explicit hidden toggle; the old
-// overflow trick with no JS toggler breaks with N stacked canvases).
-function syncChromeForActive() {
-  const id = pool.activeEntryId() ?? state.current;
-  const empty = el["terminal-empty"] ?? document.getElementById("terminal-empty");
-  if (empty) empty.hidden = id != null;
-}
-
+// Empty view sync lives in the pool (syncEmptyView); this module calls it on
+// activate/park/dispose so the chrome never duplicates pool state.
 export function focusTerminal() {
   if (!terminalVisible) return;
   if (window.matchMedia("(max-width: 1099px)").matches && el["mobile-input"]) {
@@ -178,10 +187,10 @@ export function focusTerminal() {
   }
   const entry = active();
   entry?.term?.focus();
-  // Scope helper lookup to the active host first: with N pooled terms the
-  // document-wide query returns the oldest entry's helper, not the focused one.
-  entry?.host?.querySelector(".xterm-helper-textarea")?.focus({ preventScroll: true })
-    ?? document.querySelector(".xterm-helper-textarea")?.focus({ preventScroll: true });
+  // With N pooled terms the document-wide query returns the oldest entry's
+  // helper, not the focused one — and focus() returns undefined, so a ??
+  // fallback would always run. Focus the active host's helper only.
+  entry?.host?.querySelector(".xterm-helper-textarea")?.focus({ preventScroll: true });
 }
 
 function syncCompactFocusGuard() {
@@ -251,15 +260,6 @@ export function doFit({ force = false } = {}) {
   const entry = active();
   if (!entry) return;
   fitEntry(entry, { force });
-}
-
-// Window resize broadcasts to every pooled socket (each entry's dims live on
-// its own term; server clamps 20-500x5-200 as today).
-function fitAll({ force = false } = {}) {
-  for (const id of pool.entryIds()) {
-    const entry = entryFor(id);
-    if (entry?.term) fitEntry(entry, { force });
-  }
 }
 
 function touchPixelsPerLine() {
@@ -671,6 +671,21 @@ function sendNow(msg, id = state.current) {
     return false;
   }
 }
+// Background bytes (e.g. tmux query replies from a parked terminal) go to
+// their own socket directly: never through the scroll-exit/deferred path,
+// and never a notice — the user isn't looking at that session.
+function sendQuiet(msg, id = state.current) {
+  const ws = state.sockets.get(id);
+  if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+  try {
+    ws.send(JSON.stringify(msg));
+    return true;
+  } catch {
+    const entry = id ? entryFor(id) : null;
+    handleSocketFailure(ws, id, entry?.generation ?? 0);
+    return false;
+  }
+}
 
 export function scrollTerminal(direction, steps = 2) {
   const id = state.current;
@@ -718,7 +733,9 @@ function sessionRuntimeLabel(session) {
 }
 
 export function syncSessionMetadata(sessions) {
-  if (!state.current) return;
+  // A ghost preview owns the header ("not running"); the 2 s poll must not
+  // repaint it with the parked session until the preview closes.
+  if (!state.current || state.selectedGhost) return;
   const session = sessions.find((item) => item.id === state.current);
   if (session) {
     el["term-title"].textContent = `${session.title}  ·  ${sessionRuntimeLabel(session)}`;
@@ -764,7 +781,6 @@ function pumpOutputQueue(entry) {
     }
     if (consumed) entry.outQueue.splice(0, consumed);
     entry.replay.writes++;
-    entry.replay.lastAt = Date.now();
     if (entry.replay.hidden) armReplayTimer(entry);
     entry.outWriteActive = true;
     try {
@@ -779,12 +795,6 @@ function pumpOutputQueue(entry) {
       queueMicrotask(() => pumpOutputQueue(entry));
     }
     return;
-  }
-  // The first drain is just the visible screen; scrollback history streams
-  // after it. Reveal on drain only after a quiet spell with no new batches,
-  // so the tail is actually present when the canvas reappears.
-  if (entry.replay.writes > 0 && Date.now() - entry.replay.lastAt >= REPLAY_QUIET_MS) {
-    revealReplay(entry);
   }
 }
 function enqueueOutput(text, ws, id, generation, bytes = 0) {
@@ -855,7 +865,6 @@ function connectSession(entry, session, generation, reconnecting = false) {
   });
   if (state.token) params.set("token", state.token);
   const ws = new WebSocket(`${proto}://${location.host}/ws?${params}`);
-  entry.ws = ws;
   lastResizeBySocket.set(ws, `${entry.term.cols}x${entry.term.rows}`);
   state.sockets.set(session.id, ws);
   setConnFor(entry, reconnecting ? "reconnecting" : "connecting");
@@ -929,14 +938,16 @@ export function attach(session, { reset = true } = {}) {
     }
     return;
   }
-  // Pooled switch: park the previous host in place (socket + buffer survive).
+  // Pooled switch: blur the outgoing textarea so a parked host never keeps
+  // focus, then park its host in place (socket + buffer survive).
   // No mass-close, no global generation bump — each entry reconnects alone.
+  active()?.term?.blur();
   const entry = pool.activateEntry(session.id);
   const isCold = !entry.term || entry.replay.writes === 0;
   setCurrent(session.id);
   paintHeaderStatus(session);
   el.main.classList.add("has-session");
-  syncChromeForActive();
+  pool.syncEmptyView();
   ensureTermFor(entry);
   el["term-title"].textContent = `${session.title}  ·  ${sessionRuntimeLabel(session)}`;
   el["kill-btn"].hidden = false;
@@ -953,8 +964,11 @@ export function attach(session, { reset = true } = {}) {
   } else if (!entry.replay.hidden) {
     // Warm instant switch: hide any cover left by the previous active entry
     // and rebind the shared scrubber to this entry's stored scroll state.
+    // The reused socket never reopens, so focus here (desktop only, matching
+    // the old onopen behavior); the covered path focuses on reveal instead.
     if (el["replay-loader"]) el["replay-loader"].hidden = true;
     if (entry.host) entry.host.style.visibility = "";
+    if (!window.matchMedia("(max-width: 1099px)").matches) focusTerminal();
   } else if (pool.activeEntryId() === entry.id) {
     // Activating an entry still mid-replay (background reset or slow stream):
     // keep it parked behind the shared cover until its own drain reveals it.
@@ -962,27 +976,65 @@ export function attach(session, { reset = true } = {}) {
     if (el["replay-loader"]) el["replay-loader"].hidden = false;
   }
   applyScrollState(entry.scroll.current, session.id);
-  refreshScrollState(session.id);
-  emit("sidebar:rerender");
-  if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
   const liveWs = state.sockets.get(session.id);
   if (!liveWs || liveWs.readyState === WebSocket.CLOSED || liveWs.readyState === WebSocket.CLOSING) {
+    // A reopened entry starts its backoff over: an exhausted entry would
+    // otherwise get one attempt with a stale armed timer, then give up.
+    clearTimeout(entry.reconnectTimer);
+    entry.reconnectAttempt = 0;
     connectSession(entry, session, entry.generation);
   } else {
     fitEntry(entry, { force: true });
   }
 }
 
+// Park the focused entry for a ghost preview: host hidden, socket + buffer
+// survive, session chrome hidden, current cleared so the poll, header actions
+// and sidebar highlight stop targeting a session the user can't see.
+let parkedCurrentId = null;
+export function parkCurrent() {
+  const id = state.current;
+  const entry = id ? entryFor(id) : null;
+  if (!entry) return null;
+  entry.term?.blur();
+  pool.parkEntry(id);
+  parkedCurrentId = id;
+  setCurrent(null);
+  el.main.classList.remove("has-session");
+  el["kill-btn"].hidden = true;
+  el["profile-btn"].hidden = true;
+  if (el.quickkeys) el.quickkeys.hidden = true;
+  return id;
+}
+// Resume after a ghost preview: reactivate the parked host with no replay,
+// or fall back to the empty chrome when it was disposed while parked.
+export function resumeCurrent() {
+  const id = parkedCurrentId;
+  parkedCurrentId = null;
+  if (!id || !pool.hasEntry(id)) {
+    showEmptyChrome();
+    return null;
+  }
+  return reactivateEntry(id);
+}
+// Dispose every pooled entry whose session is gone (killed elsewhere while
+// pooled in the background). Runs on each refresh; the pool holds at most 4.
+export function pruneSessions(sessions) {
+  for (const id of pool.entryIds()) {
+    if (!sessions.find((s) => s.id === id)) pool.disposeEntry(id);
+  }
+  if (parkedCurrentId && !pool.hasEntry(parkedCurrentId)) parkedCurrentId = null;
+}
 // Reactivate a parked entry (ghost preview return): show host, repaint header,
 // rebind scrubber, refit. No replay — buffer + socket survived the park.
-export function reactivateEntry(id = state.current) {
+function reactivateEntry(id = state.current) {
   if (!id || !pool.hasEntry(id)) return null;
   const entry = pool.activateEntry(id);
   setCurrent(id);
   const session = state.sessions.find((item) => item.id === id);
   paintHeaderStatus(session);
   el.main.classList.add("has-session");
-  syncChromeForActive();
+  pool.syncEmptyView();
   if (entry.term) {
     if (!entry.replay.hidden) {
       if (entry.host) entry.host.style.visibility = "";
@@ -1002,14 +1054,7 @@ export function reactivateEntry(id = state.current) {
   }
   return entry;
 }
-
-// Dispose one session's view (kill / vanished refresh): socket gone, host node
-// gone via the pool hook. Clears focused chrome only when it was current.
-export function removeSessionView(id) {
-  if (!id) return false;
-  const wasCurrent = state.current === id;
-  pool.disposeEntry(id);
-  if (!wasCurrent) return true;
+function showEmptyChrome() {
   setCurrent(null);
   el.main.classList.remove("has-session");
   el["term-title"].textContent = "no session";
@@ -1018,6 +1063,16 @@ export function removeSessionView(id) {
   if (el.quickkeys) el.quickkeys.hidden = true;
   applyScrollState({ history: 0, position: 0, inMode: false }, null);
   paintHeaderStatus(undefined);
-  syncChromeForActive();
+  pool.syncEmptyView();
+}
+// Dispose one session's view (kill / vanished refresh): socket gone, host node
+// gone via the pool hook. Clears focused chrome only when it was current.
+export function removeSessionView(id) {
+  if (!id) return false;
+  const wasCurrent = state.current === id;
+  if (parkedCurrentId === id) parkedCurrentId = null;
+  pool.disposeEntry(id);
+  if (!wasCurrent) return true;
+  showEmptyChrome();
   return true;
 }

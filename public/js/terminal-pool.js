@@ -17,7 +17,7 @@ function emptyView() {
   return document.getElementById("terminal-empty");
 }
 
-function syncEmptyView() {
+export function syncEmptyView() {
   const empty = emptyView();
   if (!empty) return;
   // Explicit handling: empty shown iff no active entry. Replaces the old
@@ -51,13 +51,12 @@ function makeEntry(id, host) {
     host,
     term: null,
     fit: null,
-    ws: null,
     generation: 0,
     reconnectAttempt: 0,
     reconnectTimer: 0,
     outQueue: [],
     outWriteActive: false,
-    replay: { hidden: false, timer: 0, writes: 0, deadline: 0, lastAt: 0 },
+    replay: { hidden: false, timer: 0, writes: 0, deadline: 0 },
     scroll: {
       scrolling: false,
       scrubDragging: false,
@@ -74,9 +73,6 @@ function makeEntry(id, host) {
       current: { history: 0, position: 0, inMode: false },
     },
     connState: "idle",
-    visible: false,
-    fitFrame: 0,
-    observer: null,
   };
 }
 
@@ -140,7 +136,6 @@ export function activateEntry(id) {
   if (activeId && activeId !== id) parkEntry(activeId, { keepActive: true });
   activeId = id;
   touch(id);
-  entry.visible = true;
   if (entry.host) {
     entry.host.style.visibility = "";
     entry.host.style.pointerEvents = "";
@@ -155,7 +150,6 @@ export function activateEntry(id) {
 export function parkEntry(id, { keepActive = false } = {}) {
   const entry = entries.get(id);
   if (!entry) return null;
-  entry.visible = false;
   if (entry.host) {
     entry.host.style.visibility = "hidden";
     entry.host.style.pointerEvents = "none";

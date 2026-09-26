@@ -10,5 +10,8 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 self.addEventListener("fetch", (event) => {
-  event.respondWith(fetch(event.request));
+  // Installability needs a fetch handler to exist; navigations are the only
+  // traffic that benefits. Everything else (the 2 s poll, chat, uploads)
+  // goes direct instead of through the worker for no benefit.
+  if (event.request.mode === "navigate") event.respondWith(fetch(event.request));
 });

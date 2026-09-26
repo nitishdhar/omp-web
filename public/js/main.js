@@ -6,7 +6,6 @@ import { el, initDom } from "./dom.js";
 import { api } from "./api.js";
 import { captureUrlToken, wireAuth, showAuth } from "./auth.js";
 import * as terminal from "./terminal.js";
-import * as pool from "./terminal-pool.js";
 import * as modals from "./modals.js";
 import { wireQuickkeys, activateQuickkeysSession, resetQuickkeysSession } from "./quickkeys.js";
 import { wireUsage } from "./usage.js";
@@ -48,11 +47,10 @@ function clearGhostView() {
   state.selectedGhost = null;
   ghost.hideGhost();
   applyMode(state.mode);
-  // Parked live entry survived the ghost preview (socket + buffer intact):
-  // reactivate its host, header, and scrubber. No replay — instant.
-  if (state.current && !pool.activeEntryId() && pool.hasEntry(state.current)) {
-    terminal.reactivateEntry(state.current);
-  }
+  // The parked live entry survived the preview (socket + buffer intact):
+  // resume its host, header and scrubber with no replay, or fall back to
+  // the empty chrome when it was disposed while parked.
+  terminal.resumeCurrent();
   emit("sidebar:rerender");
 }
 function selectGhost(id) {
@@ -60,8 +58,9 @@ function selectGhost(id) {
   if (!item) return;
   closeFileViewer();
   chat.resetChat();
-  // Park: host hidden, socket + buffer survive for instant restore.
-  if (state.current) pool.parkEntry(state.current);
+  // Park the live session: socket + buffer survive, chrome hides, current
+  // clears so header actions and the poll stop targeting a hidden session.
+  terminal.parkCurrent();
   activateQuickkeysSession(null);
   state.selectedGhost = id;
   // resetChat() ran above with no ghost selected, which leaves the landing
@@ -201,6 +200,9 @@ async function refresh() {
       activateQuickkeysSession(null);
       el["mode-toggle"].hidden = false;
     }
+    // Pooled background entries killed elsewhere keep a terminal, host node
+    // and LRU slot until evicted — dispose them here instead.
+    terminal.pruneSessions(sessions);
   } catch (e) {
     el["side-foot"].textContent = "offline: " + e.message;
   } finally {
@@ -260,9 +262,10 @@ async function killSession(id) {
     : "OMP process";
   if (!confirm(`Kill this session? Its ${runtime} ends and cannot be revived.`)) return;
   try {
+    const wasCurrent = state.current === id;
     await api(`/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
     terminal.removeSessionView(id);
-    if (state.current === null) {
+    if (wasCurrent) {
       closeFileViewer();
       chat.resetChat();
       activateQuickkeysSession(null);
