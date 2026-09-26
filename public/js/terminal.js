@@ -26,6 +26,25 @@ let scrollExitCallbacks = [];
 let currentScrollState = { history: 0, position: 0, inMode: false };
 let outputQueue = [], outputWriteActive = false;
 let replayHidden = false, replayTimer = null, replayWrites = 0, replayDeadline = 0;
+// TEMPORARY replay debug (?replaydebug): on-screen event trace. Remove after
+// the refresh-sweep diagnosis lands.
+const REPLAY_DEBUG = location.search.includes("replaydebug");
+let replayLog = [];
+function replayTrace(event) {
+  if (!REPLAY_DEBUG) return;
+  const t = new Date();
+  const stamp = `${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")}.${String(t.getMilliseconds()).padStart(3, "0")}`;
+  replayLog.push(`${stamp} ${event}`);
+  if (replayLog.length > 8) replayLog = replayLog.slice(-8);
+  let badge = document.getElementById("replay-debug");
+  if (!badge) {
+    badge = document.createElement("div");
+    badge.id = "replay-debug";
+    badge.style.cssText = "position:fixed;top:4px;right:4px;z-index:9999;max-width:70vw;background:#000;color:#0f0;font:11px/1.5 monospace;white-space:pre-wrap;padding:6px 8px;border:1px solid #0f0;border-radius:6px;pointer-events:none";
+    document.body.append(badge);
+  }
+  badge.textContent = replayLog.join("\n");
+}
 const intentionalSockets = new WeakSet();
 const failedSockets = new WeakSet();
 const nonRetrySockets = new WeakSet();
@@ -79,9 +98,10 @@ export function resetTerm() {
   // slow multi-second replay stays parked; the absolute cap bounds it for
   // sessions that never go quiet.
   replayDeadline = Date.now() + REPLAY_MAX_MS;
-  armReplayTimer();
   const generation = connectionGeneration;
   if (el.term) el.term.style.visibility = "hidden";
+  replayTrace(`hide gen=${generation} el=${Boolean(el.term)} vis=${el.term?.style.visibility}`);
+  armReplayTimer();
   pumpOutputQueue();
 }
 
@@ -90,7 +110,7 @@ function armReplayTimer() {
   const wait = Math.min(REPLAY_REVEAL_MS, Math.max(0, replayDeadline - Date.now()));
   const generation = connectionGeneration;
   replayTimer = setTimeout(() => {
-    if (generation === connectionGeneration) revealReplay();
+    if (generation === connectionGeneration) revealReplay("timeout");
   }, wait);
 }
 
@@ -100,12 +120,13 @@ function armReplayTimer() {
 // visibility:hidden keeps layout so fitting still measures correctly.
 const REPLAY_REVEAL_MS = 1200;
 const REPLAY_MAX_MS = 8000;
-function revealReplay() {
+function revealReplay(why = "drain") {
   if (!replayHidden) return;
   replayHidden = false;
   clearTimeout(replayTimer);
   if (el.term) el.term.style.visibility = "";
   try { term?.scrollToBottom(); } catch {}
+  replayTrace(`reveal via=${why} writes=${replayWrites} vis=${el.term?.style.visibility}`);
 }
 
 export function showEmpty() {
@@ -631,6 +652,7 @@ function pumpOutputQueue() {
     }
     if (consumed) outputQueue.splice(0, consumed);
     replayWrites++;
+    if (replayWrites === 1) replayTrace(`first write bytes=${bytes}`);
     if (replayHidden) armReplayTimer();
     outputWriteActive = true;
     try {
