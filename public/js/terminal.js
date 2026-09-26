@@ -25,6 +25,7 @@ let scrollPump = Promise.resolve(), deferredScrollInputs = [], deferredInputByte
 let scrollExitCallbacks = [];
 let currentScrollState = { history: 0, position: 0, inMode: false };
 let outputQueue = [], outputWriteActive = false;
+let replayHidden = false, replayTimer = null;
 const intentionalSockets = new WeakSet();
 const failedSockets = new WeakSet();
 const nonRetrySockets = new WeakSet();
@@ -72,7 +73,28 @@ export function getTerm() { return term; }
 export function resetTerm() {
   if (!term) return;
   outputQueue.push({ reset: true });
+  replayHidden = true;
+  const generation = connectionGeneration;
+  if (term.element) term.element.style.visibility = "hidden";
+  clearTimeout(replayTimer);
+  replayTimer = setTimeout(() => {
+    if (generation === connectionGeneration) revealReplay();
+  }, REPLAY_REVEAL_MS);
   pumpOutputQueue();
+}
+
+// A fresh attach replays scrollback from an empty buffer; xterm follows the
+// tail progressively, which reads as the view sweeping down from the top on
+// every reload. Park the canvas hidden until the first burst drains (or a
+// bounded timeout, for sessions that never go quiet), then reveal at the tail.
+// visibility:hidden keeps layout so fitting still measures correctly.
+const REPLAY_REVEAL_MS = 1200;
+function revealReplay() {
+  if (!replayHidden) return;
+  replayHidden = false;
+  clearTimeout(replayTimer);
+  if (term?.element) term.element.style.visibility = "";
+  try { term?.scrollToBottom(); } catch {}
 }
 
 export function showEmpty() {
@@ -613,6 +635,7 @@ function pumpOutputQueue() {
     }
     return;
   }
+  revealReplay();
 }
 
 function enqueueOutput(text, ws, id, generation, bytes = 0) {

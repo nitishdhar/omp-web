@@ -204,6 +204,11 @@ async function refresh() {
 
 
 async function boot() {
+  // PWA install prompt needs a service worker (sw.js caches nothing — it only
+  // satisfies the installability check). Fails silently off secure contexts.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js").catch(() => {});
+  }
   try {
     state.meta = await api("/meta");
     state.selectedFolder = state.selectedFolder || state.meta.workspaceRoot;
