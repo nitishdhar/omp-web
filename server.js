@@ -7,10 +7,16 @@ const { StringDecoder } = require("string_decoder");
 const pty = require("node-pty");
 const { WebSocketServer } = require("ws");
 const config = require("./config");
-// Never expose a host shell accidentally on a fresh installation.
-if (!config.token) {
-  console.error("omp-web: access token missing. Run omp-web setup (or npm run setup), or set OMP_WEB_TOKEN.");
+// Token is opt-in: no configured token means an open console. That is only
+// acceptable on loopback, where the OS user boundary still applies — an open
+// console on a LAN address answers to anyone who can reach the port.
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
+if (!config.token && !LOOPBACK_HOSTS.has(config.host)) {
+  console.error("omp-web: refusing to run without an access token on a non-loopback address. Set OMP_WEB_TOKEN (or run setup --token), or bind the loopback default.");
   process.exit(1);
+}
+if (!config.token) {
+  console.error("omp-web: no access token configured — console is OPEN to the local machine. Run setup --token or set OMP_WEB_TOKEN to require one.");
 }
 if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
   console.error("omp-web: OMP_WEB_PORT must be an integer between 1 and 65535.");
@@ -41,7 +47,7 @@ const MIME = {
 };
 
 function tokenOk(reqUrl, headers) {
-  if (!config.token) return false;
+  if (!config.token) return true;
   const t = reqUrl.searchParams.get("token") || headers["x-omp-web-token"];
   return t === config.token;
 }
@@ -366,4 +372,5 @@ server.listen(config.port, config.host, () => {
   console.log(`workspace: ${config.workspaceRoot}`);
   console.log(`profiles:  ${listProfiles().join(", ")}`);
   if (config.token) console.log("auth: token required");
+  else console.log("auth: OPEN — no access token (loopback only)");
 });

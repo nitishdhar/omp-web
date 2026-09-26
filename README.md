@@ -64,9 +64,13 @@ npm run setup
 npm start
 ```
 
-Open `http://127.0.0.1:7799` in the same user's browser on that machine. On the first
-visit, copy the default private token to the clipboard without printing
-it:
+Open `http://127.0.0.1:7799` in the same user's browser on that machine. With
+the default setup there is no access token: the console opens straight into
+the session list.
+
+If you set up with `--token` (or `OMP_WEB_TOKEN`), the first visit shows an
+**Enter access token** dialog instead. Copy the token to the clipboard without
+printing it:
 
 ```sh
 pbcopy < "${OMP_WEB_HOME:-$HOME/.omp-web}/token" # macOS
@@ -74,11 +78,8 @@ xclip -selection clipboard < "${OMP_WEB_HOME:-$HOME/.omp-web}/token" # Linux (X1
 wl-copy < "${OMP_WEB_HOME:-$HOME/.omp-web}/token" # Linux (Wayland)
 ```
 
-Paste it into the browser's **Enter access token** dialog and select
-**Unlock**. Setup and startup report the token's file path, never its value.
-If you instead provide `OMP_WEB_TOKEN`, setup leaves the token file absent or
-unchanged; copy that separately managed secret into the same dialog without
-printing it or putting it in shell history. `npm start` continues to run the
+Paste it into the dialog and select **Unlock**. Setup and startup report the
+token's file path, never its value. `npm start` continues to run the
 server directly from the checkout; it does not install a background service.
 
 ### What setup does
@@ -89,8 +90,9 @@ server directly from the checkout; it does not install a background service.
    suggests the current directory if the default workspace is absent);
 2. asks for an existing or new local OMP profile name when `--profile` is not
    supplied;
-3. creates a random local access token only when neither `OMP_WEB_TOKEN` nor
-   an existing token file supplies one;
+3. creates a random local access token only with `--token` (or when
+   `OMP_WEB_TOKEN` supplies one) — otherwise the console runs open on
+   loopback;
 4. stores its own missing configuration values under `~/.omp-web` by default;
    and
 5. offers to hand off to native OMP onboarding.
@@ -116,7 +118,7 @@ omp-web setup --workspace "$HOME/Developer" --profile personal
 The full setup form is:
 
 ```text
-omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login]
+omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login] [--token]
 ```
 
 ## Native OMP account and profile onboarding
@@ -186,6 +188,11 @@ omp-web doctor
 omp-web setup
 omp-web
 ```
+
+Setup creates no access token by default: the console runs open on loopback,
+relying on the OS user boundary. Pass `omp-web setup --token` (or set
+`OMP_WEB_TOKEN`) to require a token instead — mandatory if the server will
+ever bind a non-loopback address.
 
 Use the version attached to the release you are installing if it differs.
 Registry-style commands such as `npm install -g omp-web` are intentionally
@@ -292,13 +299,16 @@ them.
 
 ## Security boundary
 
-omp-web is for **one trusted OS user on one machine**. It protects its localhost
-HTTP and WebSocket endpoints with the private token created during setup, but
-it is not a sandbox, multi-user system, or remote-access product. Anyone who
-can use that OS account and obtain the token can control the exposed tmux/OMP
-sessions and, through OMP, run tools in the selected workspace. Keep the
-server on loopback, protect the token and any optional transcription key, and
-choose a workspace whose contents that user is allowed to access.
+omp-web is for **one trusted OS user on one machine**. By default it runs open
+on loopback with no access token: anyone who can use that OS account can
+control the exposed tmux/OMP sessions and, through OMP, run tools in the
+selected workspace. Pass `setup --token` (or set `OMP_WEB_TOKEN`) to protect
+the localhost HTTP and WebSocket endpoints with a private token — required
+before binding any non-loopback address (the server refuses to start open
+outside loopback). Either way it is not a sandbox, multi-user system, or
+remote-access product. Keep the server on loopback, protect the token and any
+optional transcription key, and choose a workspace whose contents that user is
+allowed to access.
 
 If you independently put a trusted reverse proxy in front of the server, it
 must preserve the request `Host` header. omp-web compares browser `Origin`
