@@ -15,6 +15,11 @@ const {
   substantiveOwnedJsonl,
   sessionCwdFor,
 } = require("./transcripts");
+const {
+  STATUS_STALE_MS,
+  THINKING_STALE_MS,
+  normalizedSessionStatus,
+} = require("./sessions/status");
 const registry = require("./registry");
 const { listFolders } = require("./api/util");
 
@@ -54,15 +59,7 @@ const SESSION_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const BOOTSTRAP_MARK = String(process.pid);
 const EFFORT_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 const STATUS_EXTENSION = path.join(__dirname, "extensions", "session-status.mjs");
-const SESSION_STATUSES = new Set(["starting", "idle", "working", "waiting", "done", "shell"]);
-const SHELL_COMMANDS = new Set(["sh", "bash", "zsh", "fish"]);
-const STATUS_STALE_MS = 90_000;
-const THINKING_STALE_MS = 15_000;
-const RECENT_DONE_MS = 5 * 60_000;
 const OMP_GUARD_REJECTED = "__omp_web_not_running__";
-const TRANSCRIPT_STATUS_TAIL_BYTES = 128 * 1024;
-const TRANSCRIPT_STATUS_CACHE_LIMIT = 128;
-const transcriptStatusCache = new Map();
 const TMUX_COMMAND_TOKEN = /^[A-Za-z0-9_@%=:.,+;/-]+$/;
 const MODEL_WINDOW_CACHE = new Map();
 const MODEL_WINDOW_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -309,130 +306,6 @@ async function bootstrap() {
   bootstrapped = true;
 }
 
-function transcriptEntryStatus(entry, fallbackAt) {
-  if (!entry || typeof entry !== "object") return null;
-  const message = entry.message && typeof entry.message === "object" ? entry.message : null;
-  const messageAt = Number(message && message.timestamp);
-  const parsedAt = Date.parse(entry.timestamp);
-  const statusAt = Number.isFinite(messageAt) && messageAt > 0
-    ? messageAt
-    : (Number.isFinite(parsedAt) ? parsedAt : fallbackAt);
-
-  if (entry.type === "custom") {
-    if (entry.customType === "session_exit") return { status: "idle", statusAt };
-    if (entry.customType === "tool_execution_start") {
-      return {
-        status: entry.data && entry.data.toolName === "ask" ? "waiting" : "working",
-        statusAt,
-      };
-    }
-    return null;
-  }
-  if (entry.type !== "message" || !message) return null;
-  if (message.role === "user" || message.role === "toolResult") {
-    return { status: "working", statusAt };
-  }
-  if (message.role !== "assistant") return null;
-
-  const toolCalls = Array.isArray(message.content)
-    ? message.content.filter((block) => block && block.type === "toolCall")
-    : [];
-  if (toolCalls.some((block) => block.name === "ask")) {
-    return { status: "waiting", statusAt };
-  }
-  if (toolCalls.length) {
-    return { status: "working", statusAt };
-  }
-  if (message.stopReason === "stop") {
-    return { status: "done", statusAt };
-  }
-  if (message.stopReason === "error" || message.stopReason === "aborted") {
-    return { status: "idle", statusAt };
-  }
-  return { status: "working", statusAt };
-}
-
-function transcriptSessionStatus(file) {
-  if (!file) return { status: "unknown", statusAt: 0 };
-  let stat;
-  try {
-    stat = fs.statSync(file);
-  } catch {
-    return { status: "unknown", statusAt: 0 };
-  }
-
-  const cached = transcriptStatusCache.get(file);
-  if (cached && cached.size === stat.size && cached.mtimeMs === stat.mtimeMs) {
-    return cached.result;
-  }
-
-  const length = Math.min(stat.size, TRANSCRIPT_STATUS_TAIL_BYTES);
-  const start = stat.size - length;
-  const buffer = Buffer.allocUnsafe(length);
-  let bytesRead = 0;
-  let fd;
-  try {
-    fd = fs.openSync(file, "r");
-    bytesRead = fs.readSync(fd, buffer, 0, length, start);
-  } catch {
-    return { status: "unknown", statusAt: 0 };
-  } finally {
-    if (fd !== undefined) fs.closeSync(fd);
-  }
-
-  let text = buffer.subarray(0, bytesRead).toString("utf8");
-  if (start > 0) {
-    const firstNewline = text.indexOf("\n");
-    text = firstNewline === -1 ? "" : text.slice(firstNewline + 1);
-  }
-  let result = { status: "unknown", statusAt: 0 };
-  for (const line of text.split("\n")) {
-    if (!line) continue;
-    try {
-      const projected = transcriptEntryStatus(JSON.parse(line), Math.trunc(stat.mtimeMs));
-      if (projected) result = projected;
-    } catch {}
-  }
-
-  transcriptStatusCache.set(file, { size: stat.size, mtimeMs: stat.mtimeMs, result });
-  if (transcriptStatusCache.size > TRANSCRIPT_STATUS_CACHE_LIMIT) {
-    transcriptStatusCache.delete(transcriptStatusCache.keys().next().value);
-  }
-  return result;
-}
-function settledTranscriptSessionStatus(file) {
-  const result = transcriptSessionStatus(file);
-  if (result.status !== "done") return result;
-  const age = Date.now() - result.statusAt;
-  return age >= 0 && age <= RECENT_DONE_MS
-    ? result
-    : { status: "idle", statusAt: result.statusAt };
-}
-
-function normalizedSessionStatus(sessionType, status, statusAt, paneCommand, transcript) {
-  const timestamp = Number(statusAt) || 0;
-  if (sessionType === "shell") return { status: "shell", statusAt: timestamp };
-  const age = Date.now() - timestamp;
-  const fresh = SESSION_STATUSES.has(status) && timestamp && age >= 0 && age <= STATUS_STALE_MS;
-  if (fresh && status === "starting") return { status: "starting", statusAt: timestamp };
-  if (status === "shell") return { status: "shell", statusAt: timestamp };
-  if (fresh && status !== "idle") return { status, statusAt: timestamp };
-  const transcriptStatus = settledTranscriptSessionStatus(transcript);
-  if (fresh) {
-    return transcriptStatus.status === "done"
-      ? transcriptStatus
-      : { status: "idle", statusAt: timestamp };
-  }
-  // Wrapped panes keep a login-shell parent while OMP runs (architecture.md),
-  // so a shell pane command proves nothing there — fall through to the
-  // transcript. Only a non-shell foreground command is exit evidence.
-  const base = paneCommand ? path.basename(String(paneCommand)) : "";
-  if (base && base !== path.basename(config.ompBin) && !SHELL_COMMANDS.has(base)) {
-    return { status: "shell", statusAt: timestamp };
-  }
-  return transcriptStatus;
-}
-
 function sessionFromLine(line) {
   const [
     name, folder, profile, type, rawStatus, rawStatusAt, rawRuntimeActivity,
@@ -510,12 +383,15 @@ async function list() {
     .sort((a, b) => b.lastActivity - a.lastActivity);
   // Adopt live sessions missing from the registry (pre-registry sessions,
   // missed writes, hand-made tmux sessions). Never the reverse: registry
-  // entries without live sessions are ghosts, never auto-created.
+  // entries without live sessions are ghosts, never auto-created. One
+  // deferred write for the whole batch: adopt heals on every list, so a
+  // dropped flush is retried next time and GET never pays for N upserts.
   try {
     const { entries } = registry.readRegistry();
+    const missing = [];
     for (const session of live) {
       if (entries[session.id] || !session.folder) continue;
-      rememberSession({
+      missing.push({
         id: session.id,
         folder: session.folder,
         profile: session.profile || "default",
@@ -523,6 +399,24 @@ async function list() {
         title: session.title || session.id,
         created: Number(session.created) || Date.now(),
         pinned: Boolean(session.pinned),
+      });
+    }
+    if (missing.length) {
+      setImmediate(() => {
+        try {
+          const current = registry.readRegistry();
+          const merged = { ...current.entries };
+          const adopted = new Set();
+          for (const record of missing) {
+            if (merged[record.id]) continue;
+            merged[record.id] = record;
+            adopted.add(record.id);
+          }
+          if (!adopted.size) return;
+          registry.writeRegistry(merged, current.forgotten.filter((id) => !adopted.has(id)));
+        } catch (error) {
+          console.error(`registry adopt failed: ${error.message}`);
+        }
       });
     }
   } catch (error) {

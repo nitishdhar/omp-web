@@ -42,13 +42,40 @@ function validateRecord(record) {
   };
 }
 
+// Records are flat (validateRecord returns primitives only), so a per-record
+// spread fully isolates the cache from caller mutation.
+function copyEntries(entries) {
+  return Object.fromEntries(
+    Object.entries(entries).map(([id, record]) => [id, { ...record }])
+  );
+}
+// Stat-keyed read cache: registry I/O sits on the GET path (adopt-on-list in
+// sessions.js list()), so repeated lists within one file generation skip the
+// re-parse. Key is `${file}:${size}:${mtimeMs}` from a single statSync; any
+// path/size/mtime change is a miss and re-reads. Copies go out (`{...entries}`,
+// `[...forgotten]`) so callers that mutate the result cannot poison the cache;
+// writeRegistry refreshes it on success. A failed stat invalidates.
+let registryCache = null;
+
 // Missing file → empty; corrupt JSON → empty + console.error, never throw —
 function readRegistry() {
+  let key = null;
+  try {
+    const stat = fs.statSync(config.registryFile);
+    key = `${config.registryFile}:${stat.size}:${stat.mtimeMs}`;
+  } catch (error) {
+    registryCache = null;
+    if (error && error.code === "ENOENT") return { entries: {}, forgotten: [] };
+    console.error(`registry read failed (${config.registryFile}): ${error.message}`);
+    return { entries: {}, forgotten: [] };
+  }
+  if (registryCache && registryCache.key === key) {
+    return { entries: copyEntries(registryCache.entries), forgotten: [...registryCache.forgotten] };
+  }
   let raw;
   try {
     raw = fs.readFileSync(config.registryFile, "utf8");
   } catch (error) {
-    if (error && error.code === "ENOENT") return { entries: {}, forgotten: [] };
     console.error(`registry read failed (${config.registryFile}): ${error.message}`);
     return { entries: {}, forgotten: [] };
   }
@@ -57,6 +84,7 @@ function readRegistry() {
     parsed = JSON.parse(raw);
   } catch (error) {
     console.error(`registry corrupt (${config.registryFile}): ${error.message}`);
+    registryCache = { key, entries: {}, forgotten: [] };
     return { entries: {}, forgotten: [] };
   }
   const source = parsed && typeof parsed === "object" ? parsed.entries || {} : {};
@@ -80,7 +108,8 @@ function readRegistry() {
       }
     }
   }
-  return { entries, forgotten };
+  registryCache = { key, entries, forgotten };
+  return { entries: copyEntries(entries), forgotten: [...forgotten] };
 }
 
 function writeRegistry(entries, forgotten = []) {
@@ -105,6 +134,16 @@ function writeRegistry(entries, forgotten = []) {
   const tmp = `${config.registryFile}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, JSON.stringify({ entries: clean, forgotten: validForgotten }, null, 2));
   fs.renameSync(tmp, config.registryFile);
+  try {
+    const stat = fs.statSync(config.registryFile);
+    registryCache = {
+      key: `${config.registryFile}:${stat.size}:${stat.mtimeMs}`,
+      entries: copyEntries(clean),
+      forgotten: [...validForgotten],
+    };
+  } catch {
+    registryCache = null;
+  }
   return { entries: clean, forgotten: validForgotten };
 }
 

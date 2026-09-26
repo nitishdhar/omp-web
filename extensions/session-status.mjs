@@ -2,6 +2,7 @@ const STATUS_VALUES = new Set(["idle", "working", "waiting", "done", "shell"]);
 const TARGET = /^=omp_[A-Za-z0-9_-]{1,40}:$/;
 const SOCKET = /^[A-Za-z0-9_.-]{1,64}$/;
 const HEARTBEAT_MS = 30_000;
+// Mirror of sessions/status.js — change together.
 const RECENT_DONE_MS = 5 * 60_000;
 const WRITE_TIMEOUT_MS = 1_500;
 const THINKING_MAX = 120;
