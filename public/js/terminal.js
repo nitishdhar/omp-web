@@ -26,24 +26,26 @@ let scrollExitCallbacks = [];
 let currentScrollState = { history: 0, position: 0, inMode: false };
 let outputQueue = [], outputWriteActive = false;
 let replayHidden = false, replayTimer = null, replayWrites = 0, replayDeadline = 0;
-// TEMPORARY replay debug (?replaydebug): on-screen event trace. Remove after
-// the refresh-sweep diagnosis lands.
+// TEMPORARY replay diagnosis: trace events are reported to the server over the
+// socket (?replaydebug enables, OMP_WEB_REPLAY_DEBUG=1 logs). Remove after.
 const REPLAY_DEBUG = location.search.includes("replaydebug");
 let replayLog = [];
+let replayWs = null;
 function replayTrace(event) {
   if (!REPLAY_DEBUG) return;
   const t = new Date();
   const stamp = `${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")}.${String(t.getMilliseconds()).padStart(3, "0")}`;
   replayLog.push(`${stamp} ${event}`);
-  if (replayLog.length > 8) replayLog = replayLog.slice(-8);
-  let badge = document.getElementById("replay-debug");
-  if (!badge) {
-    badge = document.createElement("div");
-    badge.id = "replay-debug";
-    badge.style.cssText = "position:fixed;top:4px;right:4px;z-index:9999;max-width:70vw;background:#000;color:#0f0;font:11px/1.5 monospace;white-space:pre-wrap;padding:6px 8px;border:1px solid #0f0;border-radius:6px;pointer-events:none";
-    document.body.append(badge);
-  }
-  badge.textContent = replayLog.join("\n");
+  if (replayLog.length > 12) replayLog = replayLog.slice(-12);
+}
+function replayReport() {
+  if (!REPLAY_DEBUG || !replayLog.length) return;
+  try {
+    if (replayWs && replayWs.readyState === WebSocket.OPEN) {
+      replayWs.send(JSON.stringify({ t: "replay", events: replayLog }));
+    }
+  } catch {}
+  replayLog = [];
 }
 const intentionalSockets = new WeakSet();
 const failedSockets = new WeakSet();
@@ -127,6 +129,7 @@ function revealReplay(why = "drain") {
   if (el.term) el.term.style.visibility = "";
   try { term?.scrollToBottom(); } catch {}
   replayTrace(`reveal via=${why} writes=${replayWrites} vis=${el.term?.style.visibility}`);
+  replayReport();
 }
 
 export function showEmpty() {
@@ -652,7 +655,11 @@ function pumpOutputQueue() {
     }
     if (consumed) outputQueue.splice(0, consumed);
     replayWrites++;
-    if (replayWrites === 1) replayTrace(`first write bytes=${bytes}`);
+    if (replayWrites === 1) {
+      replayTrace(`first write bytes=${bytes}`);
+      replayWs = entry.ws;
+      setTimeout(replayReport, 3000);
+    }
     if (replayHidden) armReplayTimer();
     outputWriteActive = true;
     try {
@@ -672,7 +679,6 @@ function pumpOutputQueue() {
   // hasn't started, and showing the empty canvas is the top-flash itself.
   if (replayWrites > 0) revealReplay();
 }
-
 function enqueueOutput(text, ws, id, generation, bytes = 0) {
   outputQueue.push({ text, ws, id, generation, bytes });
   pumpOutputQueue();

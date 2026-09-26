@@ -240,6 +240,12 @@ wss.on("connection", async (ws, req, url) => {
     } catch {
       return;
     }
+    // TEMPORARY refresh-sweep diagnosis: the browser reports its replay trace
+    // when ?replaydebug is set. Remove with the client side after.
+    if (msg.t === "replay") {
+      if (process.env.OMP_WEB_REPLAY_DEBUG) console.log(`replay trace: ${JSON.stringify(msg.events)}`);
+      return;
+    }
     if (msg.t === "ack" && acknowledgedFlow) {
       const bytes = Number(msg.bytes);
       if (!Number.isSafeInteger(bytes) || bytes <= 0) return;
