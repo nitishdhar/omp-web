@@ -1,0 +1,27 @@
+name: release
+
+# Tag-driven tarball releases: `git tag v0.3.0 && git push origin v0.3.0`
+# packs omp-web and attaches the .tgz to the GitHub release.
+# `package.json` version and tag must match (pack filename comes from it).
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Pack
+        run: npm pack
+      - name: Attach to release
+        run: gh release create "${GITHUB_REF#refs/tags/}" omp-web-*.tgz --title "${GITHUB_REF#refs/tags/}" --generate-notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
