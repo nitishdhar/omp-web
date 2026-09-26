@@ -26,27 +26,6 @@ let scrollExitCallbacks = [];
 let currentScrollState = { history: 0, position: 0, inMode: false };
 let outputQueue = [], outputWriteActive = false;
 let replayHidden = false, replayTimer = null, replayWrites = 0, replayDeadline = 0, lastReplayWriteAt = 0;
-// TEMPORARY replay diagnosis: trace events are reported to the server over the
-// socket (?replaydebug enables, OMP_WEB_REPLAY_DEBUG=1 logs). Remove after.
-const REPLAY_DEBUG = location.search.includes("replaydebug");
-let replayLog = [];
-let replayWs = null;
-function replayTrace(event) {
-  if (!REPLAY_DEBUG) return;
-  const t = new Date();
-  const stamp = `${String(t.getMinutes()).padStart(2, "0")}:${String(t.getSeconds()).padStart(2, "0")}.${String(t.getMilliseconds()).padStart(3, "0")}`;
-  replayLog.push(`${stamp} ${event}`);
-  if (replayLog.length > 12) replayLog = replayLog.slice(-12);
-}
-function replayReport() {
-  if (!REPLAY_DEBUG || !replayLog.length) return;
-  try {
-    if (replayWs && replayWs.readyState === WebSocket.OPEN) {
-      replayWs.send(JSON.stringify({ t: "replay", events: replayLog }));
-    }
-  } catch {}
-  replayLog = [];
-}
 const intentionalSockets = new WeakSet();
 const failedSockets = new WeakSet();
 const nonRetrySockets = new WeakSet();
@@ -102,7 +81,7 @@ export function resetTerm() {
   replayDeadline = Date.now() + REPLAY_MAX_MS;
   const generation = connectionGeneration;
   if (el.term) el.term.style.visibility = "hidden";
-  replayTrace(`hide gen=${generation} el=${Boolean(el.term)} vis=${el.term?.style.visibility}`);
+  el["replay-loader"].hidden = false;
   armReplayTimer();
   pumpOutputQueue();
 }
@@ -128,9 +107,8 @@ function revealReplay(why = "drain") {
   replayHidden = false;
   clearTimeout(replayTimer);
   if (el.term) el.term.style.visibility = "";
+  el["replay-loader"].hidden = true;
   try { term?.scrollToBottom(); } catch {}
-  replayTrace(`reveal via=${why} writes=${replayWrites} vis=${el.term?.style.visibility}`);
-  replayReport();
 }
 
 export function showEmpty() {
@@ -657,11 +635,6 @@ function pumpOutputQueue() {
     if (consumed) outputQueue.splice(0, consumed);
     replayWrites++;
     lastReplayWriteAt = Date.now();
-    if (replayWrites === 1) {
-      replayTrace(`first write bytes=${bytes}`);
-      replayWs = entry.ws;
-      setTimeout(replayReport, 3000);
-    }
     if (replayHidden) armReplayTimer();
     outputWriteActive = true;
     try {

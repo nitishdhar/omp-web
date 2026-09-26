@@ -14,6 +14,11 @@
 .content-host { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
 #term-wrap { position: relative; flex: 1; min-height: 0; background: var(--term-bg); padding: 6px; touch-action: none; overflow: hidden; }
 #term { width: 100%; height: 100%; }
+/* Replay cover: shown while a fresh attach replays scrollback behind a hidden
+   canvas, so a reload lands at the tail instead of sweeping down from the top.
+   Bars reuse the chat shimmer; pointer-events none so input still lands. */
+.replay-loader { position: absolute; inset: 0; z-index: 3; display: flex; flex-direction: column; justify-content: center; gap: 9px; padding: 0 26px; pointer-events: none; }
+.replay-loader[hidden] { display: none; }
 /* Keep xterm measurable in Chat while preventing stale viewport gaps from
    exposing or accepting input from its terminal surfaces. */
 #main.chat-active #term-wrap,
