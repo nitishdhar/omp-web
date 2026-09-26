@@ -25,7 +25,7 @@ let scrollPump = Promise.resolve(), deferredScrollInputs = [], deferredInputByte
 let scrollExitCallbacks = [];
 let currentScrollState = { history: 0, position: 0, inMode: false };
 let outputQueue = [], outputWriteActive = false;
-let replayHidden = false, replayTimer = null, replayWrites = 0, replayDeadline = 0;
+let replayHidden = false, replayTimer = null, replayWrites = 0, replayDeadline = 0, lastReplayWriteAt = 0;
 // TEMPORARY replay diagnosis: trace events are reported to the server over the
 // socket (?replaydebug enables, OMP_WEB_REPLAY_DEBUG=1 logs). Remove after.
 const REPLAY_DEBUG = location.search.includes("replaydebug");
@@ -122,6 +122,7 @@ function armReplayTimer() {
 // visibility:hidden keeps layout so fitting still measures correctly.
 const REPLAY_REVEAL_MS = 1200;
 const REPLAY_MAX_MS = 8000;
+const REPLAY_QUIET_MS = 400;
 function revealReplay(why = "drain") {
   if (!replayHidden) return;
   replayHidden = false;
@@ -655,6 +656,7 @@ function pumpOutputQueue() {
     }
     if (consumed) outputQueue.splice(0, consumed);
     replayWrites++;
+    lastReplayWriteAt = Date.now();
     if (replayWrites === 1) {
       replayTrace(`first write bytes=${bytes}`);
       replayWs = entry.ws;
@@ -675,9 +677,10 @@ function pumpOutputQueue() {
     }
     return;
   }
-  // The reset-only drain (no output arrived yet) must not reveal: the replay
-  // hasn't started, and showing the empty canvas is the top-flash itself.
-  if (replayWrites > 0) revealReplay();
+  // The first drain is just the visible screen; scrollback history streams
+  // after it. Reveal on drain only after a quiet spell with no new batches,
+  // so the tail is actually present when the canvas reappears.
+  if (replayWrites > 0 && Date.now() - lastReplayWriteAt >= REPLAY_QUIET_MS) revealReplay();
 }
 function enqueueOutput(text, ws, id, generation, bytes = 0) {
   outputQueue.push({ text, ws, id, generation, bytes });
