@@ -14,7 +14,7 @@ TOKENS = """
   --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
   --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
   --pop-shadow:0 8px 24px rgba(0,0,0,.36);
-  --reading-width:760px; --term-bg:#101214; --bubble-user:#20252b;
+  --reading-width:760px; --chat-text:13.5px; --term-bg:#101214; --bubble-user:#20252b;
   --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
 }
 *{box-sizing:border-box}
@@ -160,7 +160,9 @@ body = f"""
       console keeps working offline and over a VPN with no third-party
       request. <code>cv05</code> is enabled to give <code>l</code> a tail:
       l/1/I have to separate at 11px in an app full of paths and flags.
-      These preview cards use the same UI and monospace stacks as the shipped app.</p>
+      These preview cards use the same UI and monospace stacks as the shipped app.
+      Transcript type is <code>--chat-text: 13.5px</code>, shared by assistant
+      prose, user bubbles and the composer so chat stays on the app type scale.</p>
   </section>
   <section class="ds-block">
     <span class="ds-label">Light theme</span>
@@ -442,7 +444,7 @@ popover_html = """<div class="pop-menu">
 
 body = f"""
   <section class="ds-block on-bg">
-    <span class="ds-label">Sidebar — 240px desktop rail</span>
+    <span class="ds-label">Sidebar — 288px desktop rail (240–480 drag; min(420px, 100%) overlay)</span>
     <div class="side-pair">
       {sidebar_html}
       <div style="display:flex;flex-direction:column;gap:12px">
@@ -1351,7 +1353,7 @@ header grammar, one dot grammar, one keyboard grammar.
 
 ## Surfaces
 
-- **Navigation / Sidebar** - 240px, text-first rows, Needs you before Pinned.
+- **Navigation / Sidebar** - 288px, text-first rows, Needs you before Pinned.
 - **Shell / Header and terminal** - 56px header, destination-labelled mode toggle.
 - **Chat / Transcript** - message silhouettes, send states, boundaries, empty state.
 - **Chat / Tool calls and receipts** - one collapsed row per turn, lazy detail.

@@ -55,17 +55,20 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | File | Role |
 |---|---|
 | `server.js` | Node HTTP + WebSocket only: static shell serving, `/api` dispatch (delegated), `/ws` PTY bridge, process guards. |
-| `bin/omp-web.js` | macOS CLI: foreground start, non-destructive local setup, prerequisite checks, and explicit handoff to native OMP profile onboarding. |
+| `bin/omp-web.js` | macOS/Linux CLI: foreground start, non-destructive local setup, prerequisite checks, and explicit handoff to native OMP profile onboarding. `doctor` treats Linux as warn-only; every later row validates what actually matters there. |
 | `bin/postinstall.js` | Repairs executable permissions on installed node-pty spawn helpers, including hoisted dependency layouts. |
 | `api/routes.js` | REST route table. Session create/list/scroll/profile-reload/pin/delete operations use shared bounded request/error handling; `/api/meta` projects native profile names plus bounded, identifier-validated `modelRoles` provider/model/effort metadata; chat routes and session attachments delegate to their owning modules. |
 | `api/util.js` | Shared JSON response/error mapping and a 1 MB, strict-UTF-8 request-body reader. API responses are `no-store`. |
 | `api/usage.js` | One-minute native `omp usage --json --redact` adapter. It aggregates configured profiles, deduplicates accounts by allowlisted usage fields, and strips account/credential metadata before returning dynamic provider limit data to the browser. |
+| `api/transcribe.js` | Voice-input transcription proxy. Accepts a short browser-recorded clip and forwards it to the configured OpenAI-compatible `/audio/transcriptions` endpoint; the provider key lives only in server config and never reaches the browser, and audio is held in memory, never written to disk. |
 | `api/attachments.js` | Bounded, authenticated image/document upload parser; validates allowed types and stores private per-session attachments outside workspaces. |
 | `api/file-preview.js` | Authenticated raw file preview endpoint: opens the resolved file with `O_NOFOLLOW`, re-checks containment on the **opened descriptor's** path (no check/open race), applies the viewer-folder credential filter, and streams only regular allowlisted files up to 10 MiB. |
 | `api/file-resolve.js` | Where a cited path lives. A relative path resolves in order: `<session folder>/<path>`, then `<workspace>/<repo>/<path>` for exactly one top-level repo, then a unique suffix match under the session folder (`api/file-find.js`), then a unique suffix match in the user's viewer folders. Several matches return `409 ECONFLICT` rather than a guess. `~` expands to `$HOME` and `…/` elisions are treated as suffixes, but every result must still fall inside an allowed root: the session folder, sibling workspace repos, that session's attachments, and Settings → File viewer folders. |
 | `api/file-find.js` | Bounded async suffix search behind the preview resolver. Agents cite documents by bare name (`action-docket.md`), and resolution used to stop at the folder's top level, so a nested file was a dead link while its top-level sibling opened. It skips dot/build dirs, never follows symlinks, refuses `..`, stops at depth 8 or 25k files (a session rooted at the whole workspace is ~85k), and treats a capped walk as unproven rather than unique. |
 | `api/preview-roots.js` | **File viewer folders**, edited in Settings (`GET`/`PUT /api/settings/preview-roots`) and stored in `~/.omp-web/settings.json` (0600, atomic write), read on every request so changes apply without a restart. Extra roots must be existing absolute (or `~/`) directories; `/`, `$HOME` and its ancestors, and anything overlapping omp-web's own data directory are refused. Inside an extra root, hidden paths, credential-shaped names (`auth`, `oauth`, `credentials`, `secret`, `token`, `password`, `api_key`) and `mcp.json`/`settings.local.json` are never served; the check runs on the opened descriptor's path. Elided citations (`…/Gift Deed/x.pdf`) resolve by unique suffix in the session folder, then in these roots. This is not a boundary against the token holder (the terminal is a full shell); it keeps the web route from serving the whole home directory. |
 | `sessions.js` | tmux-backed agent and shell sessions (`tmux -L omp-web`). Every operation resolves the exact pane id before acting; chat input, keys, kill, and profile reload share a bounded per-session queue. Per-session state lives in `@omp_*` user options (folder/profile/type/status/status_at/activity/title/created/pinned/transcript/thinking/thinking_at/model/model_at — it dies with the session). Shell sessions stop after tmux opens its configured login shell; agent sessions launch OMP with the status extension. Lists reconcile the bounded title record and a cached 128 KiB transcript tail for agent sessions, so `/rename` and lifecycle status reach the dashboard even for live processes launched before the extension. `lastActivity` comes from tmux `session_activity`. |
+| `sessions/status.js` | Pure status-derivation core (required by `sessions.js`; `sessionFromLine` keeps the `@omp_*` parse context). Owns the staleness constants, the 128-entry transcript-tail cache, and the four derivation functions with their precedence — live pane identity > fresh heartbeat (≤90s) > transcript tail > idle — plus the truth table in its header comment. The extension keeps a mirror comment, not shared code (separate runtime). |
+| `registry.js` | The ONE sanctioned durable exception: ghost set `{entries, forgotten}` for boot recovery, never live state. Never read for liveness; `forgotten` suppresses transcript ghosts only (200-cap, `upsert` clears a re-created id). Reads go through a stat-keyed cache (one `statSync`, copies out so callers cannot poison it); explicit mutations stay synchronous, while adopt-on-list collects drift and flushes ONE deferred `writeRegistry`. Empty/corrupt/single-bad-record inputs degrade to the transcript fallback, never throw. |
 | `extensions/session-status.mjs` | OMP lifecycle adapter. Session start, agent, ask, approval, retry/compaction, and shutdown hooks publish precise status plus a heartbeat into the owning tmux session without adding a sidecar process or state file. **Only the interactive top-level session publishes**: subagents run in-process with their own runner and inherit this extension plus `OMP_WEB_STATUS_TARGET`, so every handler guards on `ctx.hasUI`. Writes dedupe against the last value tmux accepted, so a failed write retries on the next transition. Auto-compaction additionally publishes a bounded `compaction` activity until `auto_compaction_end`. A successful terminal agent turn publishes Recently done, then the heartbeat settles it to Idle after five minutes unless new work supersedes it. `message_update` reasoning deltas publish a throttled one-line headline into `@omp_thinking`/`@omp_thinking_at`, cleared when text, a tool call, or the turn begins. |
 | `transcripts.js` | Owned OMP JSONL discovery and bounded title reads; OMP remains the title writer and session record authority. The `@omp_transcript` tmux pin is a **hint, not an override**: resolution picks the most recently written transcript this session id owns (its profile directory, the legacy id directory, and every sibling profile directory), so a profile/model switch inside the TUI cannot strand chat on a dead file. Subagent transcripts live one level deeper and are never adopted. |
 | `transcript-read.js` | Bounded incremental JSONL reader. Detects shrink/misalignment and same-offset rewrites with a 64-byte cursor anchor. Oversized records are scanned with fixed memory and skipped only after their newline is found; scan omissions are reported to the client. |
@@ -74,7 +77,7 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | `api/git-status.js` | Five-second cwd-keyed git probe for the Chat runtime rail. It returns branch/upstream, ahead/behind counts, and tracked or untracked dirty-file count; non-repositories and git failures resolve to a neutral state without exposing file contents. |
 | `config.js` | Env-driven config; PATH/locale injection for children; `sessionsDir` + `ompHome` for profile and transcript discovery. |
 | `public/js/main.js` | ES-module entry: boot, wiring, app-level actions (kill/pin/reload). Views emit intent events (`session:pin`, `session:kill`, `meta:refreshed`, …); main owns them. `profile-info.js` renders the active profile's bounded role/model/effort projection in the header action menu. |
-| `public/js/state.js` | Single mutable store (token/meta/sessions/current/sockets/view) + tiny pub-sub. The only shared mutable module. |
+| `public/js/state.js` | Single mutable store (token/meta/sessions/current/sockets) + tiny pub-sub. The only shared mutable module. |
 | `public/js/api.js` | REST client. Clones caller headers, adds `x-omp-web-token`, preserves `AbortSignal`, and lets the browser set multipart boundaries for `FormData`. It normalizes structured API failures and raises the auth gate on 401. |
 | `public/js/voice.js` | Factory for the main-owned capability-gated MediaRecorder/transcription controller. Chat and mobile Terminal register separate buttons, status targets, and session-owned insertion callbacks. Starting, recording, stopping, and transcribing remain explicit button states; terminal transcription appends text without synthesizing Return. |
 | `public/js/file-viewer.js` | Session-scoped modal viewer for linked local paths. Authenticated raw responses render Markdown/text, images, and PDFs; unsupported binary documents retain a download action. Blob URLs are revoked on close or replacement. |
@@ -82,10 +85,15 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | `public/js/terminal.js` | xterm init/fit, serialized output writes with byte acknowledgements, coalesced touch scrolling + absolute history scrubber, confirmed deferred-input settlement, WebSocket reconnection/identity guards, synchronized active-title lifecycle status, and compact-layout focus protection. Terminal connection health remains separate metadata; a closed socket adds a red ring without replacing the lifecycle fill color. |
 | `public/js/quickkeys.js` | Quick-key toolbar plus the mobile Terminal composer: session-owned input drafts, attachment insertion, shared-controller dictation, Return submission, deferred-input settlement, and retry state. |
 | `public/js/chat.js` | Chat poll/cursor lifecycle, reload epoch invalidation, adaptive active-turn refresh, and per-session optimistic sends. Failed or delivery-unknown messages remain visible with explicit **Retry** and **Edit**; authoritative echoes reconcile by full-text SHA-256 or, within the same send window, a whitespace-normalized full preview. Idle sessions poll at the normal cadence; live turn activity temporarily tightens refresh latency without introducing a second writer or event channel. |
-| `public/js/chat/` | A centered safe-Markdown transcript, a 240-entry DOM history window with 200-entry paging, lazy nested tool details, compact visible tool-name/count receipts, message actions, a **Jump to now** control, a persistent current-workflow strip with expandable Todo + active agents, persistent live-intent/runtime metadata, and a composer with session-scoped drafts, voice input, image upload/drop, draft-aware send readiness, and compact-screen transcription that does not summon the software keyboard before the user chooses to edit. |
-| `public/js/sidebar/` | `index.js` (search + one render key), `projects.js` (Needs you / Working / Pinned, folder groups that carry only their remaining sessions, and the collapsed **Not running** section), `activity.js` (age-bucket labels), `resize.js` (persisted desktop column width), `rows.js`, and one shared popover in `menu.js`. |
+| `public/js/chat/` | `transcript.js` (bounded renderer: payloads in memory, one fixed-size DOM window, tool bodies built only when opened), `composer.js` (wires `#chat-input`/`#chat-send`/`#chat-interrupt`, emits intent events only), `panels.js` (derived-state workflow inspector + composer dock, re-rendered every poll cycle), `hash.js` (SHA-256 for optimistic-echo reconciliation). A centered safe-Markdown transcript, a 240-entry DOM history window with 200-entry paging, lazy nested tool details, compact visible tool-name/count receipts, message actions, a **Jump to now** control, a persistent current-workflow strip with expandable Todo + active agents, persistent live-intent/runtime metadata, and a composer with session-scoped drafts, voice input, image upload/drop, draft-aware send readiness, and compact-screen transcription that does not summon the software keyboard before the user chooses to edit. |
+| `public/js/sidebar/` | `index.js` (search + one render key + the midnight `nextActivityBoundaryAt` for main.js rollover scheduling), `projects.js` (Needs you / Working / Pinned, folder groups that carry only their remaining sessions, and the collapsed **Not running** section), `resize.js` (persisted desktop column width), `rows.js`, and one shared popover in `menu.js`. The old Recent `activity.js` is deleted; one ranked list serves both jobs. |
 | `public/js/notice.js` | The single transient-feedback surface, rendered into `#copy-flash`. Every app-level action (pin, kill, restore, forget, reload, copy path) reports success and failure through it; no `alert()` remains. |
 | `public/js/new-session.js` | Session creation shared by the modal and the landing composer: remembered folder/profile choice, message-derived session name, and the bounded `POST /api/sessions` call. |
+| `public/js/auth.js` | Token capture (URL → localStorage) plus the 401 gate UI. |
+| `public/js/dom.js` | DOM handle registry (`el`, `initDom`) plus the tiny `elem()` builder and `escapeHtml`. Builders return elements; no unescaped `innerHTML` with dynamic values. |
+| `public/js/ghost.js` | Ghost detail view: the main-pane surface for a dead (restorable) session — full folder path, type/profile, and history source so the restore decision has room. Main.js owns show/hide; this module only renders. |
+| `public/js/settings.js` | Settings sheet for scattered preferences and read-only profile visibility (native OMP owns profile config). |
+| `public/index.html` + `public/vendor/` | Static shell served verbatim: element ids (the API other modules build against), the `?v=`-pinned module scripts, and vendored xterm assets (no build step, no bundler). |
 | `scripts/check-events.mjs` | `npm run check:events`. Fails when a `public/js` module emits an event with no `get()` subscriber, or subscribes to one nothing emits — both previously shipped as silently dead buttons. |
 | `public/js/paths.js` | The only path abbreviator. `~` means `$HOME` and nothing else — abbreviating the workspace root to `~` printed paths that do not exist (`~/omp-web` for `$HOME/workspace/omp-web`). Project surfaces show the workspace-relative segment and keep the real absolute path in the tooltip. `/api/meta` supplies `homeDir` for this. |
 | `public/{base,sidebar,terminal,modals,chat}.css` | Split stylesheets: tokens+frame, sidebar rows/menus, terminal, modals, structured chat. CSS custom props in `:root` shared across views. |
@@ -445,6 +453,18 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   selected; the visible terminal buffer is reset when the reloaded session is
   active.
 
+Transport bounds checklist (every number enforced in code, not advisory):
+
+- Output batches cap at 64 KiB with `flow=ack` byte accounting; the server
+  pauses PTY reads at 1 MiB unacknowledged and resumes at 512 KiB.
+- Early input during PTY attach caps at 64 KiB (`EARLY_INPUT_LIMIT`).
+- tmux targets are exact: `=omp_<id>` for sessions, `=omp_<id>:` for panes
+  and options — never a bare prefix tmux could match against a sibling.
+- Scroll steps validate to 1–24 rows per request.
+- Mutations racing on one pane (chat text/keys, kill, profile reload) share a
+  per-session queue of 32 (`MAX_QUEUED_OPERATIONS`); overflow throws `EBUSY`
+  instead of growing memory.
+
 ## Session persistence boundary
 
 - tmux is the source of truth for session liveness, and per-session metadata
@@ -558,15 +578,22 @@ the bottom. Terminal copy-mode/history scrolling is independent.
 
 | Var | Default | Meaning |
 |---|---|---|
+| `OMP_WEB_HOME` | `~/.omp-web` | omp-web's own configuration, token, and attachment root. |
+| `OMP_WEB_OMP_HOME` | `~/.omp` | Native OMP root used only to discover profiles and session transcripts; never configured. |
 | `OMP_WEB_HOST` | `127.0.0.1` | Listen host. Set `0.0.0.0` for LAN access; every request still needs the token. |
 | `OMP_WEB_PORT` | `7799` | Listen port. |
 | `OMP_WEB_WORKSPACE` | `~/workspace` | Root for the folder picker. |
 | `OMP_WEB_EXTRA_ROOTS` | empty | Colon-separated extra folder trees (e.g. `~/private`). Their children are listed after the workspace folders as `<root name>/<folder>`, and cross-project file links search them too. Discovery only: sessions could always run in any folder. |
 | `OMP_WEB_OMP_BIN` | `omp` | omp binary. |
 | `OMP_WEB_PROFILES_DIR` | `~/.omp/profiles` | Profile picker source. |
-| `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux server label. |
+| `OMP_WEB_SESSIONS_DIR` | `<OMP_WEB_OMP_HOME>/web-sessions` | Per-session OMP transcript directory. |
 | `OMP_WEB_ATTACHMENTS_DIR` | `~/.omp-web/attachments` | Private, session-scoped attachment storage. |
+| `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
+| `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux server label. |
 | `OMP_WEB_TOKEN` | *(file)* | API and WebSocket access token; falls back to `~/.omp-web/token`. |
+| `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
+| `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this machine and sent only to the configured transcription service. |
+| `OMP_WEB_TRANSCRIBE_MODEL` | empty | Transcription model name. |
 
 ## Decisions & gotchas (learned the hard way)
 
@@ -601,6 +628,31 @@ the bottom. Terminal copy-mode/history scrolling is independent.
 - **Dedupe status writes against what tmux accepted, not what was intended**:
   recording the intent before the write meant one failed `tmux set-option`
   suppressed every retry until the next heartbeat.
+
+## Audit findings ledger (2026-09-20 live-app audit)
+
+Thirteen findings from driving the running service at 1280×900 and 390×844
+(`docs/design-system/audit/findings.html`). Eleven shipped — ten in the
+same-day craft pass, the rail's branch/dirty half later via the cached
+`api/git-status.js` probe; one kept by choice; one still open.
+
+| Finding | Status |
+|---|---|
+| Chat loses info the terminal preserves (flat lists, bold-not-heading, boxed code) | Shipped: renderer pass — nesting, heading scale, inline-code weight. |
+| No turn structure (unscannable continuous prose) | Shipped: turn anchors with start times. |
+| Disabled composer looks enabled | Shipped: explicit disabled send state. |
+| Empty state wastes the canvas | Shipped: landing screen teaches next actions. |
+| Runtime rail under-delivers (no spend/branch) | Shipped in two parts: spend verified equal to the TUI, then branch/dirty/ahead/behind via the cached probe (5s cwd-keyed). Context % stays omitted where the catalog carries no context window — invented precision is worse than omission. |
+| Mobile drawer dead end (no exit) | Shipped: dismiss control. The edge-swipe gesture itself stays deferred (open). |
+| Workflow strip reports nothing (`No open tasks`) | Shipped: strip earns its row or collapses. |
+| Seven same-weight header icons, kill among them | Shipped: destructive-action separation. |
+| Status inert when all idle | By choice: quiet-when-idle is the intended priority order, not a defect. |
+| Flat project/session hierarchy, noisy footer | Shipped with the one-ranked-list sidebar (Recent `activity.js` deleted). |
+| Invisible keyboard grammar (`/` search undiscoverable) | Open: no cheatsheet surface yet. |
+
+Deferred polish (not audit findings): mobile approval sheet, physical iOS
+verification, Settings redesign (writable profiles via `omp config set` —
+needs its own design; reverses the profiles-read-only rule).
 
 ## Known limitations / TODO
 

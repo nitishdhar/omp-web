@@ -20,7 +20,7 @@ header grammar, one dot grammar, one keyboard grammar.
 
 ## Surfaces
 
-- **Navigation / Sidebar** - 240px, text-first rows, Needs you before Pinned.
+- **Navigation / Sidebar** - 288px, text-first rows, Needs you before Pinned.
 - **Shell / Header and terminal** - 56px header, destination-labelled mode toggle.
 - **Chat / Transcript** - message silhouettes, send states, boundaries, empty state.
 - **Chat / Tool calls and receipts** - one collapsed row per turn, lazy detail.
