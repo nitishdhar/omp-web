@@ -93,6 +93,9 @@ const config = {
     (() => {
       try { return fs.readFileSync(path.join(OWP_DIR, "token"), "utf8").trim(); } catch { return ""; }
     })(),
+  // Explicit escape hatch for a deliberately LAN-published console with no
+  // token: the server still refuses open non-loopback binds without it.
+  allowOpen: process.env.OMP_WEB_ALLOW_OPEN === "1",
 };
 
 // Preserve a user's configured PATH order. Only append common locations that

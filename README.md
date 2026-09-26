@@ -239,7 +239,8 @@ both take precedence over the application default.
 | `OMP_WEB_ATTACHMENTS_DIR` | `<OMP_WEB_HOME>/attachments` | Private, per-session uploaded-attachment directory. |
 | `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux socket label. |
-| `OMP_WEB_TOKEN` | generated local token, unless explicitly supplied | Access token. Setup preserves an existing file and does not create one when this variable is set. Keep it private; do not commit or share it. |
+| `OMP_WEB_TOKEN` | empty | Access token. When set, HTTP and WebSocket endpoints require it; `setup --token` creates the file instead. Keep it private; do not commit or share it. |
+| `OMP_WEB_ALLOW_OPEN` | empty | Set to `1` to run with no access token on a non-loopback bind. Accepts that anyone reaching the port controls the sessions; the server refuses open LAN binds without it. |
 | `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
 | `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this machine and sent only to the configured transcription service. |
 | `OMP_WEB_TRANSCRIBE_MODEL` | empty | Transcription model name. |
@@ -305,10 +306,10 @@ control the exposed tmux/OMP sessions and, through OMP, run tools in the
 selected workspace. Pass `setup --token` (or set `OMP_WEB_TOKEN`) to protect
 the localhost HTTP and WebSocket endpoints with a private token — required
 before binding any non-loopback address (the server refuses to start open
-outside loopback). Either way it is not a sandbox, multi-user system, or
-remote-access product. Keep the server on loopback, protect the token and any
-optional transcription key, and choose a workspace whose contents that user is
-allowed to access.
+outside loopback unless `OMP_WEB_ALLOW_OPEN=1` explicitly accepts that risk).
+Either way it is not a sandbox, multi-user system, or remote-access product.
+Keep the server on loopback, protect the token and any optional transcription
+key, and choose a workspace whose contents that user is allowed to access.
 
 If you independently put a trusted reverse proxy in front of the server, it
 must preserve the request `Host` header. omp-web compares browser `Origin`

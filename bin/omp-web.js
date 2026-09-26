@@ -334,11 +334,14 @@ function doctor() {
     healthy = check(process.platform === "darwin", "macOS", process.platform) && healthy;
   }
   // Token is opt-in: no token means an open console, acceptable on loopback
-  // only (the server refuses to start open on a LAN address).
+  // only, or on a LAN bind with the explicit OMP_WEB_ALLOW_OPEN=1 hatch
+  // (the server refuses to start open on LAN without it).
   if (config.token) {
     healthy = check(true, "authentication", "access token required") && healthy;
   } else if (config.host === "127.0.0.1" || config.host === "::1" || config.host === "localhost") {
     console.log(`WARN authentication — no access token (open console on ${config.host}; setup --token to require one)`);
+  } else if (config.allowOpen) {
+    console.log(`WARN authentication — no access token, open to the network on ${config.host} via OMP_WEB_ALLOW_OPEN=1`);
   } else {
     healthy = check(false, "authentication", `no token with non-loopback bind ${config.host} — server will refuse to start`) && healthy;
   }

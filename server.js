@@ -9,14 +9,15 @@ const { WebSocketServer } = require("ws");
 const config = require("./config");
 // Token is opt-in: no configured token means an open console. That is only
 // acceptable on loopback, where the OS user boundary still applies — an open
-// console on a LAN address answers to anyone who can reach the port.
+// console on a LAN address answers to anyone who can reach the port, so it
+// needs the explicit OMP_WEB_ALLOW_OPEN=1 escape hatch.
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
-if (!config.token && !LOOPBACK_HOSTS.has(config.host)) {
-  console.error("omp-web: refusing to run without an access token on a non-loopback address. Set OMP_WEB_TOKEN (or run setup --token), or bind the loopback default.");
+if (!config.token && !LOOPBACK_HOSTS.has(config.host) && !config.allowOpen) {
+  console.error("omp-web: refusing to run without an access token on a non-loopback address. Set OMP_WEB_TOKEN (or run setup --token), bind the loopback default, or set OMP_WEB_ALLOW_OPEN=1.");
   process.exit(1);
 }
 if (!config.token) {
-  console.error("omp-web: no access token configured — console is OPEN to the local machine. Run setup --token or set OMP_WEB_TOKEN to require one.");
+  console.error(`omp-web: no access token configured — console is OPEN${LOOPBACK_HOSTS.has(config.host) ? " to the local machine" : " to the network (OMP_WEB_ALLOW_OPEN=1)"}. Run setup --token or set OMP_WEB_TOKEN to require one.`);
 }
 if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
   console.error("omp-web: OMP_WEB_PORT must be an integer between 1 and 65535.");
@@ -372,5 +373,5 @@ server.listen(config.port, config.host, () => {
   console.log(`workspace: ${config.workspaceRoot}`);
   console.log(`profiles:  ${listProfiles().join(", ")}`);
   if (config.token) console.log("auth: token required");
-  else console.log("auth: OPEN — no access token (loopback only)");
+  else console.log(`auth: OPEN — no access token${LOOPBACK_HOSTS.has(config.host) ? " (loopback only)" : " (network, OMP_WEB_ALLOW_OPEN=1)"}`);
 });

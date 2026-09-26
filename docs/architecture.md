@@ -303,7 +303,8 @@ the bottom. Terminal copy-mode/history scrolling is independent.
 - Auth is opt-in: a token from `OMP_WEB_TOKEN` or the home's `token` file
   (`setup --token` creates one) is required on `/api` and `/ws` only when
   configured. With no token the console runs OPEN on loopback, and the server
-  refuses to start open on a non-loopback bind. Neither the startup log nor
+  refuses to start open on a non-loopback bind unless `OMP_WEB_ALLOW_OPEN=1`
+  explicitly accepts that risk. Neither the startup log nor
   doctor prints a token value.
 - **Static shell is public** (no secrets); **`/api` and `/ws` require the
   token when one is configured**. The browser's REST wrapper sends `x-omp-web-token`
@@ -593,7 +594,8 @@ Transport bounds checklist (every number enforced in code, not advisory):
 | `OMP_WEB_ATTACHMENTS_DIR` | `~/.omp-web/attachments` | Private, session-scoped attachment storage. |
 | `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux server label. |
-| `OMP_WEB_TOKEN` | *(file)* | API and WebSocket access token; falls back to `~/.omp-web/token`. |
+| `OMP_WEB_TOKEN` | *(file)* | Access token; when set, `/api` and `/ws` require it. Falls back to `~/.omp-web/token` (`setup --token` creates it). |
+| `OMP_WEB_ALLOW_OPEN` | empty | `1` permits an open console on a non-loopback bind. The server refuses open LAN binds without it. |
 | `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
 | `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this machine and sent only to the configured transcription service. |
 | `OMP_WEB_TRANSCRIBE_MODEL` | empty | Transcription model name. |
