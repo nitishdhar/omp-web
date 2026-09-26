@@ -268,7 +268,7 @@ function checkSessionPersistence() {
   if (sessions.live === 0 && owners.length > 0) {
     console.log(`WARN tmux session persistence — tmux server '${config.tmuxSocket}' `
       + `holds 0 live sessions but ${owners.length} session directorie(s) under `
-      + `${config.sessionsDir} still own transcripts. A Mac reboot or tmux-server `
+      + `${config.sessionsDir} still own transcripts. A host reboot or tmux-server `
       + `kill discards live sessions and their @omp_* metadata by design; they `
       + `cannot be reattached. Run \`omp-web recover --list\` to review candidates `
       + `and recreate the ones still needed explicitly.`);
@@ -325,7 +325,13 @@ function recoverList() {
 
 function doctor() {
   let healthy = true;
-  healthy = check(process.platform === "darwin", "macOS", process.platform) && healthy;
+  // macOS or Linux are supported hosts. Linux reports warn-only: every check
+  // below (tmux, omp, node-pty) already validates what actually matters there.
+  if (process.platform === "linux") {
+    console.log(`WARN platform — ${process.platform} (supported: macOS, Linux)`);
+  } else {
+    healthy = check(process.platform === "darwin", "macOS", process.platform) && healthy;
+  }
   const nodeMajor = Number(process.versions.node.split(".")[0]);
   healthy = check(
     nodeMajor >= MINIMUM_NODE_MAJOR,
