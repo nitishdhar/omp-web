@@ -290,6 +290,7 @@
         <label>Folder<select id="f-folder"></select></label>
         <label>Profile<select id="f-profile"></select></label>
         <div id="f-profile-summary" class="profile-summary" aria-live="polite"></div>
+        <label class="check"><input id="f-notitle" type="checkbox" /> Keep my session name (no auto-title)</label>
         <div class="modal-actions">
           <button id="m-cancel" class="ghost">Cancel</button>
           <button id="m-create" class="primary">Create</button>
@@ -305,6 +306,7 @@
         <label>Profile<select id="r-profile"></select></label>
         <div id="r-profile-summary" class="profile-summary" aria-live="polite"></div>
         <label>Model <span class="hint">optional — blank uses the profile default</span><input id="r-model" placeholder="e.g. opus, glm, gpt-5.6" autocomplete="off" /></label>
+        <label class="check"><input id="r-notitle" type="checkbox" /> Keep my session name (no auto-title)</label>
         <div class="modal-actions">
           <button id="r-cancel" class="ghost">Cancel</button>
           <button id="r-reload" class="primary">Reload</button>
@@ -362,5 +364,5 @@
     <script src="/vendor/xterm.js"></script>
     <script src="/vendor/addon-fit.js"></script>
     <script src="/vendor/addon-web-links.js"></script>
-    <script type="module" src="/js/main.js?v=165"></script>
+    <script type="module" src="/js/main.js?v=170"></script>
 </html>

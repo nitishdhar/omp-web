@@ -91,12 +91,16 @@ export function openModal(folder) {
     } else if (wantProfile && state.meta.profiles.includes(wantProfile)) {
       el["f-profile"].value = wantProfile;
     }
+    // Title auto-generation is omp core behavior; shells never launch omp,
+    // so the toggle hides for shell sessions.
+    el["f-notitle"].closest("label").hidden = shellOnly;
     paintProfileSummary("f-profile", "f-profile-summary");
   };
   el["f-folder"].value = "";
   el["f-profile"].value = "";
   paint();
   el["f-name"].value = "";
+  el["f-notitle"].checked = true;
   el["m-error"].hidden = true;
   el.modal.hidden = false;
   el["f-name"].focus();
@@ -118,6 +122,9 @@ export async function createSession({ onCreated }) {
       folder,
       type: shellOnly ? "shell" : "agent",
       profile: selectedProfile?.value,
+      // Checked by default: a provided name sticks. Uncheck to opt back
+      // into omp's title auto-generation for this session.
+      noTitle: !shellOnly && el["f-notitle"].checked,
     });
     closeModal();
     rememberChoice(folder, shellOnly ? "" : selectedProfile?.value);
@@ -142,6 +149,9 @@ export function openReloadModal(sessionId, sessions) {
   paint();
   el["r-model"].value = "";
   el["r-error"].hidden = true;
+  // Preset from the session's stored choice; older sessions without one
+  // default to auto-title, matching create.
+  el["r-notitle"].checked = Boolean(s?.notitle);
   el["reload-modal"].hidden = false;
   el["r-profile"].dataset.sessionId = sessionId;
   el["r-profile"].focus();
@@ -160,7 +170,7 @@ export async function doReloadProfile({ onReloaded }) {
     const { session } = await api(`/sessions/${encodeURIComponent(id)}/profile`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ profile, model: model || undefined }),
+      body: JSON.stringify({ profile, model: model || undefined, noTitle: el["r-notitle"].checked }),
     });
     closeReloadModal();
     onReloaded(session);

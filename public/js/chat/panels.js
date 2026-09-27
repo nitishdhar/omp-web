@@ -597,7 +597,10 @@ function renderResume() {
     .slice()
     .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))
     .slice(0, 4);
-  if (!changed("resume", recent.map((session) => [session.id, session.status, session.lastActivity]))) return;
+  // Title is in the key: omp's auto-titler rewrites it without touching
+  // status or activity, and a key without it leaves stale names next to the
+  // freshly repainted sidebar and header for the same session.
+  if (!changed("resume", recent.map((session) => [session.id, session.title, session.status, session.lastActivity]))) return;
   clr(node);
   if (!recent.length) { hide(node); return; }
   show(node);

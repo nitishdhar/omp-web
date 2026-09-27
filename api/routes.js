@@ -127,6 +127,8 @@ async function handleApi(req, res, url) {
         // create() resumes the largest substantive transcript under this
         // profile when one exists (recover --list relies on this default).
         resume: body.resume === false ? false : body.resume === true ? true : undefined,
+        // Explicit opt-out only: absent/false keeps omp's title auto-generation.
+        noTitle: body.noTitle === true,
       });
       return sendJson(res, 201, { session });
     } catch (error) {
@@ -191,7 +193,7 @@ async function handleApi(req, res, url) {
       if (!listProfiles().includes(wanted)) {
         throw routeError("EBADPROFILE", `unknown profile: ${wanted}`);
       }
-      const session = await sessions.reloadProfile(sub[1], { profile: wanted, model: body.model });
+      const session = await sessions.reloadProfile(sub[1], { profile: wanted, model: body.model, noTitle: body.noTitle === true ? true : body.noTitle === false ? false : undefined });
       return sendJson(res, 200, { session });
     } catch (error) {
       return sendError(res, error);

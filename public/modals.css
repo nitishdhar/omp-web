@@ -192,3 +192,6 @@
   .set-root-form input, .set-root-form button { min-height: 44px; }
   .set-root-form input { font-size: 16px; }
 }
+/* Checkbox rows (e.g. keep-my-name): inline box, not the full-width field. */
+.modal-card label.check { display: flex; align-items: center; gap: 9px; }
+.modal-card label.check input { display: inline-block; width: auto; min-height: 0; margin-top: 0; accent-color: var(--accent); }

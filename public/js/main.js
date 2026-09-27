@@ -167,6 +167,23 @@ async function checkFrontendVersion() {
   } catch {}
 }
 
+// Restore the last active session after a refresh/PWA relaunch (tmux kept
+// the omp process alive). Runs at boot and retries on later polls while the
+// first list came back empty: an empty list means the fetch failed, not that
+// the session is gone, so the saved id must survive until a real list arrives.
+let restorePending = true;
+function restoreSavedSession() {
+  if (state.current || state.selectedGhost) {
+    restorePending = false;
+    return;
+  }
+  if (!state.sessions.length) return; // keep the key; a later poll retries
+  restorePending = false;
+  const saved = (() => { try { return localStorage.getItem("omp_web_current"); } catch { return null; } })();
+  const savedSession = saved && state.sessions.find((s) => s.id === saved);
+  if (savedSession) openSession(savedSession);
+  else if (saved) setCurrent(null); // positive absence: a real list excludes it
+}
 
 async function refresh() {
   if (refreshing) return;
@@ -203,6 +220,9 @@ async function refresh() {
     // Pooled background entries killed elsewhere keep a terminal, host node
     // and LRU slot until evicted — dispose them here instead.
     terminal.pruneSessions(sessions);
+    // A boot that raced an empty list leaves the saved id intact; pick it up
+    // as soon as a real list arrives instead of stranding the tab on landing.
+    if (restorePending) restoreSavedSession();
   } catch (e) {
     el["side-foot"].textContent = "offline: " + e.message;
   } finally {
@@ -231,14 +251,7 @@ async function boot() {
   }
   await refresh();
   await checkFrontendVersion();
-  // Restore the last active session after a refresh/PWA relaunch (tmux kept
-  // the omp process alive). Only if it still exists.
-  if (!state.current) {
-    const saved = (() => { try { return localStorage.getItem("omp_web_current"); } catch { return null; } })();
-    const savedSession = saved && state.sessions.find((s) => s.id === saved);
-    if (savedSession) openSession(savedSession);
-    else if (saved) setCurrent(null);
-  }
+  restoreSavedSession();
   // 2s while visible so a status flip (working -> done) lands within a beat of
   // the tmux write; hidden tabs fall back to 4s but must keep polling, since
   // syncAttention's waiting notification is the whole point of a hidden tab.
@@ -304,7 +317,7 @@ async function startSessionWithMessage(text) {
   let lastError = null;
   for (let n = 1; n <= 5; n++) {
     try {
-      const session = await requestSession({ name: n === 1 ? base : `${base} ${n}`, folder, profile });
+      const session = await requestSession({ name: n === 1 ? base : `${base} ${n}`, folder, profile, noTitle: true });
       rememberChoice(folder, profile);
       if (state.mode !== "chat") setMode("chat");
       onAttachUi(session);
