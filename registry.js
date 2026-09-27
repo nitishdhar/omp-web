@@ -39,6 +39,9 @@ function validateRecord(record) {
     title: typeof record.title === "string" && record.title ? record.title : record.id,
     created: Number(record.created) || 0,
     pinned: Boolean(record.pinned),
+    // Title opt-out survives tmux-server death here; tmux @omp_* options do
+    // not. Strict boolean so a stale truthy string can never sneak through.
+    notitle: record.notitle === true,
   };
 }
 

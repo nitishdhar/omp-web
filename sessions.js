@@ -557,6 +557,7 @@ async function restoreOne(id, folderOverride = null) {
       profile: spec.profile,
       type: spec.type,
       resume: spec.type === "agent" ? true : undefined,
+      noTitle: spec.notitle === true,
     });
     if (spec.title && spec.title !== id) {
       try {
@@ -573,7 +574,6 @@ async function restoreOne(id, folderOverride = null) {
         // Pin loss is cosmetic; the session is live regardless.
       }
     }
-    // Heal the registry title create() wrote from the pinned id.
     rememberSession({
       id,
       folder: session.folder || spec.folder,
@@ -582,6 +582,7 @@ async function restoreOne(id, folderOverride = null) {
       title: spec.title || id,
       created: Number(session.created) || Date.now(),
       pinned: Boolean(session.pinned),
+      notitle: spec.notitle === true,
     });
     return { id, ok: true, session };
   } catch (error) {
@@ -703,6 +704,7 @@ async function create({ name, folder, profile, type = "agent", resume, noTitle }
     title: String(name || id),
     created: createdAt,
     pinned: false,
+    notitle: noTitle === true,
   };
 
   // tmux's configured default command is already `exec $SHELL -l`. Shell
@@ -934,7 +936,6 @@ async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
   if (chosenModel) await tmux(["set-option", "-t", target, "@omp_model", chosenModel]);
   else await tmux(["set-option", "-t", target, "-u", "@omp_model"]);
   await tmux(["set-option", "-t", target, "@omp_model_at", String(Date.now())]);
-  await launchAgentPane(pane, target, cwd, command);
   rememberSession({
     id,
     folder: cwd,
@@ -943,6 +944,7 @@ async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
     title: s.title || id,
     created: Number(s.created) || Date.now(),
     pinned: Boolean(s.pinned),
+    notitle: noTitle === true || (noTitle !== false && s.notitle === true),
   });
 
   return get(id);
