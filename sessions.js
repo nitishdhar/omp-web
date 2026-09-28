@@ -54,6 +54,7 @@ const SESSION_FORMAT = [
   "#{@omp_thinking_at}",
   "#{@omp_model}",
   "#{@omp_model_at}",
+  "#{@omp_notitle}",
 ].join("\t");
 const SESSION_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const BOOTSTRAP_MARK = String(process.pid);
@@ -310,7 +311,7 @@ function sessionFromLine(line) {
   const [
     name, folder, profile, type, rawStatus, rawStatusAt, rawRuntimeActivity,
     paneCommand, title, created, attached, windows, sessionActivity, pinned, source,
-    rawThinking, rawThinkingAt, rawLaunchModel, rawLaunchedAt,
+    rawThinking, rawThinkingAt, rawLaunchModel, rawLaunchedAt, rawNoTitle,
   ] = line.split("\t");
   const id = name.slice(config.sessionPrefix.length);
   const sessionProfile = profile || "default";
@@ -358,6 +359,7 @@ function sessionFromLine(line) {
     windows: Number(windows) || 1,
     lastActivity: Number(sessionActivity) || 0,
     pinned: pinned === "1",
+    notitle: rawNoTitle === "1",
     // Size powers the unread indicator; the status cache already stats this
     // file, but not for shell sessions, so stat here and tolerate failure.
     transcriptSize: transcript ? transcriptSizeOf(transcript) : 0,
@@ -555,6 +557,7 @@ async function restoreOne(id, folderOverride = null) {
       profile: spec.profile,
       type: spec.type,
       resume: spec.type === "agent" ? true : undefined,
+      noTitle: spec.notitle === true,
     });
     if (spec.title && spec.title !== id) {
       try {
@@ -571,7 +574,6 @@ async function restoreOne(id, folderOverride = null) {
         // Pin loss is cosmetic; the session is live regardless.
       }
     }
-    // Heal the registry title create() wrote from the pinned id.
     rememberSession({
       id,
       folder: session.folder || spec.folder,
@@ -580,6 +582,7 @@ async function restoreOne(id, folderOverride = null) {
       title: spec.title || id,
       created: Number(session.created) || Date.now(),
       pinned: Boolean(session.pinned),
+      notitle: spec.notitle === true,
     });
     return { id, ok: true, session };
   } catch (error) {
@@ -652,7 +655,7 @@ async function resolvePane(id) {
   }
   return pane;
 }
-async function create({ name, folder, profile, type = "agent", resume } = {}) {
+async function create({ name, folder, profile, type = "agent", resume, noTitle } = {}) {
   await bootstrap();
   const id = slug(name);
   if (await exists(id)) {
@@ -686,6 +689,12 @@ async function create({ name, folder, profile, type = "agent", resume } = {}) {
   requireResult(await tmux(["set-option", "-t", target, "@omp_status_at", String(createdAt)]));
   requireResult(await tmux(["set-option", "-t", target, "@omp_title", String(name || id)]));
   requireResult(await tmux(["set-option", "-t", target, "@omp_created", String(createdAt)]));
+  // Title generation is omp core behavior (tiny local models); record an
+  // explicit opt-out per session so relaunches can re-apply it. Absent for
+  // older sessions, which keep today's auto-title default.
+  if (noTitle && sessionType === "agent") {
+    requireResult(await tmux(["set-option", "-t", target, "@omp_notitle", "1"]));
+  }
   requireResult(await tmux(["set-option", "-t", target, "status", "off"]));
   const record = {
     id,
@@ -695,6 +704,7 @@ async function create({ name, folder, profile, type = "agent", resume } = {}) {
     title: String(name || id),
     created: createdAt,
     pinned: false,
+    notitle: noTitle === true,
   };
 
   // tmux's configured default command is already `exec $SHELL -l`. Shell
@@ -719,6 +729,9 @@ async function create({ name, folder, profile, type = "agent", resume } = {}) {
   const command = ompCommand(id);
   if (prof) command.push(`--profile=${prof}`);
   command.push(`--session-dir=${sdir}`);
+  // Verified against the installed binary (v18.2.10): --no-title disables
+  // title auto-generation for the run.
+  if (noTitle) command.push("--no-title");
   const resumeSource = resume === false ? null : bestResumeSource(id, prof || "default");
   if (resumeSource) command.push("-r", resumeSource);
   const pane = await resolvePane(id);
@@ -825,7 +838,7 @@ async function killNow(id) {
   return true;
 }
 
-async function reloadProfileNow(id, { profile, model } = {}) {
+async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
   await bootstrap();
   const s = await get(id);
   if (!s) throw sessionError("ENOSESSION", "session not found");
@@ -896,6 +909,11 @@ async function reloadProfileNow(id, { profile, model } = {}) {
   if (newProfile) command.push(`--profile=${newProfile}`);
   command.push(`--session-dir=${sdir}`, crossProfile ? "--fork" : "-r", forkSource);
   if (chosenModel) command.push("--model", chosenModel);
+  // The dialog choice wins; otherwise a stored opt-out carries over, and
+  // older sessions without one keep auto-titling. Unchecking clears the
+  // stored option so the session returns to auto-titling.
+  const noTitleActive = noTitle === true || (noTitle !== false && s.notitle);
+  if (noTitleActive) command.push("--no-title");
 
   const pane = await resolvePane(id);
   const target = tmuxPane(id);
@@ -905,6 +923,11 @@ async function reloadProfileNow(id, { profile, model } = {}) {
   requireResult(await tmux(["set-option", "-t", target, "@omp_status", "starting"]));
   requireResult(await tmux(["set-option", "-t", target, "@omp_status_at", String(Date.now())]));
   requireResult(await tmux(["set-option", "-t", target, "@omp_profile", newProfile || "default"]));
+  if (noTitle === true) {
+    requireResult(await tmux(["set-option", "-t", target, "@omp_notitle", "1"]));
+  } else if (noTitle === false) {
+    await tmux(["set-option", "-t", target, "-u", "@omp_notitle"]);
+  }
   await tmux(["set-option", "-t", target, "-u", "@omp_transcript"]);
   // The transcript names the model only once the new runtime's first reply
   // completes; until then this is the only record of what was launched. The
@@ -913,7 +936,6 @@ async function reloadProfileNow(id, { profile, model } = {}) {
   if (chosenModel) await tmux(["set-option", "-t", target, "@omp_model", chosenModel]);
   else await tmux(["set-option", "-t", target, "-u", "@omp_model"]);
   await tmux(["set-option", "-t", target, "@omp_model_at", String(Date.now())]);
-  await launchAgentPane(pane, target, cwd, command);
   rememberSession({
     id,
     folder: cwd,
@@ -922,6 +944,7 @@ async function reloadProfileNow(id, { profile, model } = {}) {
     title: s.title || id,
     created: Number(s.created) || Date.now(),
     pinned: Boolean(s.pinned),
+    notitle: noTitle === true || (noTitle !== false && s.notitle === true),
   });
 
   return get(id);

@@ -31,6 +31,14 @@ function routeError(code, message) {
   error.code = code;
   return error;
 }
+// Optional booleans are tri-state over the wire: explicit true / explicit
+// false / absent (undefined carries the stored choice). Strict equality so
+// truthy strings like "false" can never flip a default.
+function optBoolean(value) {
+  if (value === true) return true;
+  if (value === false) return false;
+  return undefined;
+}
 
 async function handleApi(req, res, url) {
   const parts = url.pathname.split("/").filter(Boolean); // ["api", ...]
@@ -127,6 +135,8 @@ async function handleApi(req, res, url) {
         // create() resumes the largest substantive transcript under this
         // profile when one exists (recover --list relies on this default).
         resume: body.resume === false ? false : body.resume === true ? true : undefined,
+        // Tri-state: explicit choice wins, absent carries the stored opt-out.
+        noTitle: optBoolean(body.noTitle),
       });
       return sendJson(res, 201, { session });
     } catch (error) {
@@ -191,7 +201,7 @@ async function handleApi(req, res, url) {
       if (!listProfiles().includes(wanted)) {
         throw routeError("EBADPROFILE", `unknown profile: ${wanted}`);
       }
-      const session = await sessions.reloadProfile(sub[1], { profile: wanted, model: body.model });
+      const session = await sessions.reloadProfile(sub[1], { profile: wanted, model: body.model, noTitle: optBoolean(body.noTitle) });
       return sendJson(res, 200, { session });
     } catch (error) {
       return sendError(res, error);

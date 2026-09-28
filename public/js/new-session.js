@@ -52,7 +52,7 @@ export function sessionNameFrom(text) {
   return name || "New session";
 }
 
-export async function requestSession({ name, folder, profile, type = "agent" }) {
+export async function requestSession({ name, folder, profile, type = "agent", noTitle } = {}) {
   const { session } = await api("/sessions", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -61,6 +61,7 @@ export async function requestSession({ name, folder, profile, type = "agent" }) 
       folder,
       type,
       profile: type === "shell" ? undefined : profile,
+      noTitle: noTitle === true,
     }),
   });
   return session;
