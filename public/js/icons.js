@@ -11,6 +11,7 @@ const ICONS = {
   terminal: `<path d="M2 3h12v10H2z" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m4.5 6 2 2-2 2M8 10h3.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>`,
   x: `<path d="m3 3 10 10M13 3 3 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
   list: `<path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
+  branch: `<circle cx="5" cy="4" r="2.1" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="12" r="2.1" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="4" r="2.1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 6.1v3.8M11 6.1c0 2.8-2.2 3.2-4 3.7" fill="none" stroke="currentColor" stroke-width="1.5"/>`,
 };
 
 export function icon(name, size = 14) {

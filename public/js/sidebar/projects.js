@@ -230,10 +230,9 @@ function folderHeading(folder, expanded) {
       + (selected ? " active" : "")
       + (holdsCurrent ? " holds-current" : ""),
   });
-  // Split hit areas: the chevron toggles collapse only, the name selects the
-  // folder (the new-session target) only. One button doing both retargeted
-  // new sessions every time a folder was expanded. Both keep .folder-toggle
-  // so the existing row geometry still applies.
+  // Two buttons, one action: chevron and name both toggle collapse (the
+  // whole heading is the expand target users expect); the name also sets
+  // the selected folder. Both keep .folder-toggle for row geometry.
   const toggle = elem("button", {
     class: "folder-toggle folder-collapse",
     type: "button",
@@ -256,12 +255,18 @@ function folderHeading(folder, expanded) {
     "aria-label": folder.name,
     title: folder.path,
     onclick: () => {
+      // The whole heading is the expand target (the chevron is just the
+      // affordance); selecting-as-target rides along, as it did before the
+      // hit-area split, because New-session-here is a menu action now.
       state.selectedFolder = folder.path;
+      if (collapsedProjects.has(folder.path)) collapsedProjects.delete(folder.path);
+      else collapsedProjects.add(folder.path);
+      persistCollapsed();
       emit("sidebar:rerender");
     },
   },
     elem("span", { class: "folder-name", text: folder.name }),
-    elem("span", { class: "folder-count", text: String(folder.count ?? folder.sessions.length) }),
+    elem("span", { class: "folder-count", text: `(${folder.count ?? folder.sessions.length})` }),
   );
   heading.append(toggle, select, folderMenuButton(folder));
   return heading;
@@ -393,16 +398,28 @@ export function render(host, sessions, { onOpen, ghosts = [] } = {}) {
     .sort(stableCreatedOrder);
   const pinnedSection = sessionSection("Pinned", "pinned-section", pinned, onOpen);
   if (pinnedSection) host.append(pinnedSection);
+  for (const session of pinned) sidelined.add(session.id);
+  // Recent: the last handful of sessions actually touched, newest first.
+  // Folders sort by creation (stable, per the rail's ordering rule), so
+  // without this, work from yesterday sinks into collapsed folders and reads
+  // as lost unless pinned. Hoisted and deduped like the sections above.
+  const recent = sessions
+    .filter((s) => !sidelined.has(s.id) && Number(s.lastActivity) > 0)
+    .sort((a, b) => (Number(b.lastActivity) || 0) - (Number(a.lastActivity) || 0) || stableCreatedOrder(a, b))
+    .slice(0, 5);
+  const recentSection = sessionSection("Recent", "recent-section", recent, onOpen);
+  if (recentSection) host.append(recentSection);
+  for (const session of recent) sidelined.add(session.id);
 
   // Every workspace folder is listed, not only the ones with a live session:
   // the sidebar is also where you pick a project to start in, and folders
   // vanishing as their last session ended read as data loss.
   for (const folder of folders) {
-    // Waiting/working sessions hoist out of their folders; pinned ones stay
-    // put as well as listing under Pinned, so a pinned row never vanishes
-    // from its project.
+    // One session, one place: waiting/working/pinned hoist into their ranked
+    // sections above and do not duplicate into folders. A pinned row lives
+    // under Pinned; its folder is where it returns when unpinned.
     const rows = folder.sessions
-      .filter((session) => !sidelined.has(session.id) || session.pinned)
+      .filter((session) => !sidelined.has(session.id))
       .sort(stableCreatedOrder);
     // Not-running sessions belong to their folder too; the count is every
     // session the folder lists, live or not.
@@ -423,7 +440,7 @@ export function render(host, sessions, { onOpen, ghosts = [] } = {}) {
         "aria-label": `${folder.name} sessions`,
       });
       for (const session of rows) {
-        list.append(sessionRow(session, { onOpen, menu: openSessionMenu, pinnedMarker: true }));
+        list.append(sessionRow(session, { onOpen, menu: openSessionMenu }));
       }
       for (const ghost of dead) list.append(ghostRow(ghost));
       group.append(list);

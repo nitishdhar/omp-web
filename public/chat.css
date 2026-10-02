@@ -44,7 +44,7 @@
 .ca-intent { min-width: 0; overflow: hidden; color: var(--muted); font-size: 12px; font-weight: 550; text-overflow: ellipsis; white-space: nowrap; }
 /* A live reasoning headline is the model's own words, not an app label. */
 .chat-activity-thinking .ca-intent { font-style: italic; font-weight: 450; }
-.ca-tool, .ca-elapsed { flex: none; color: var(--faint); font: 11px var(--font-ui); }
+.ca-elapsed { flex: none; color: var(--faint); font: 11px var(--font-ui); }
 
 #chat-empty, #chat-loading {
   position: absolute; inset: 0; z-index: 1; display: grid; align-content: center; justify-items: center;
@@ -86,10 +86,12 @@
 .chat-user-content {
   display: flex; align-items: flex-end; flex-direction: column; max-width: min(78%, 620px);
 }
+/* Conversation first: the user turn is a quiet aside, not a card — a softer
+   fill and edge with rounder corners so assistant prose stays primary. */
 .chat-bubble {
   max-width: 100%; padding: 8px 12px; white-space: pre-wrap;
-  border: 1px solid var(--line); border-radius: 12px;
-  background: var(--bubble-user); font-size: var(--chat-text); line-height: 1.6;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 16px;
+  background: color-mix(in srgb, var(--bubble-user) 82%, transparent); font-size: var(--chat-text); line-height: 1.6;
 }
 .chat-user-text.is-collapsed {
   display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 6;
@@ -150,7 +152,7 @@
 /* No left rail on assistant turns: it reads as a blockquote and nests
    confusingly with real .chat-blockquote rails inside the same reply. */
 .chat-assistant { padding-left: 0; }
-.chat-assistant-body { font-size: var(--chat-text); line-height: 1.7; letter-spacing: 0; }
+.chat-assistant-body { font-size: var(--chat-text); line-height: 1.65; letter-spacing: 0; }
 .chat-para { margin: 0 0 11px; }
 .chat-para:last-child, .chat-list:last-child { margin-bottom: 0; }
 .chat-list { margin: 0 0 11px; padding-left: 22px; }
@@ -279,10 +281,11 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 /* Tools */
 .chat-tool-group-details { overflow: hidden; border: 0; border-radius: 0; background: transparent; }
 .chat-tool-details { overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: transparent; }
+/* The group header is plain muted text, not a card: no rule, no chrome. */
 .chat-tool-group-summary {
   display: flex; align-items: center; gap: 6px; min-height: 28px; padding: 2px 0 5px;
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 68%, transparent);
-  list-style: none; cursor: pointer; user-select: none;
+  border: 0;
+  list-style: none; cursor: pointer; user-select: none; color: var(--muted);
 }
 .chat-tool-summary {
   display: flex; align-items: center; flex-wrap: wrap; gap: 7px; min-height: 38px; padding: 7px 10px;
@@ -307,7 +310,7 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 .chat-tool-group-label { flex: none; color: var(--muted); font-size: 12px; font-weight: 550; }
 .chat-tool-group-counts {
   flex: 1; min-width: 48px; overflow: hidden; color: var(--faint);
-  font: 11px var(--font-mono); text-overflow: ellipsis; white-space: nowrap;
+  font: 11px var(--font-ui); text-overflow: ellipsis; white-space: nowrap;
 }
 .chat-tool-group-duration { flex: none; color: var(--faint); font: 11px var(--font-ui); }
 .chat-tool-group-failure { flex: none; color: var(--danger); font: 600 10px var(--font-mono); }
@@ -448,10 +451,11 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 .chat-compose-shell.attachment-drop-active, #chat-mode.attachment-drop-active .chat-compose-shell { box-shadow: inset 0 0 0 2px var(--accent); }
 /* The composer is the one surface that should feel like an object you can put
    your hands on, so it gets the app's only lifted material. */
+/* Conversation first: the composer is a soft pill dock, not another panel. */
 .chat-composer {
-  display: flex; align-items: flex-end; gap: 5px; min-height: 56px; padding: 8px;
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 5px; min-height: 56px; padding: 8px;
   border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
-  border-radius: 14px;
+  border-radius: 20px;
   background: linear-gradient(180deg, color-mix(in srgb, #fff 2%, var(--panel)), var(--panel));
   box-shadow: 0 1px 0 rgb(255 255 255 / 4%) inset, 0 6px 18px rgb(0 0 0 / 22%);
   transition: border-color .14s ease, box-shadow .14s ease;
@@ -460,6 +464,16 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
   border-color: color-mix(in srgb, var(--accent) 62%, var(--line));
   box-shadow: 0 1px 0 rgb(255 255 255 / 5%) inset, 0 8px 24px rgb(0 0 0 / 28%), var(--focus-ring);
 }
+/* Reference-style composer toolbar: the status line (model, effort, spend)
+   is the pill's own bottom row, not a separate strip under it. */
+.chat-composer .chat-runtime { flex: 1 1 100%; order: 5; min-width: 0; }
+/* Circular send, like every chat app the reference follows. */
+#chat-send { border-radius: 50%; }
+/* Agent identity opens each run of assistant turns; consecutive assistant
+   items in the same run drop it so the prose stays primary. */
+.chat-agent-label { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.chat-agent-mark { color: var(--accent); font-size: 9px; line-height: 1; }
+.chat-item.chat-assistant + .chat-item.chat-assistant .chat-agent-label { display: none; }
 #chat-input { flex: 1; min-width: 0; min-height: 38px; max-height: 196px; padding: 8px 7px; overflow-y: hidden; resize: none; border: 0; border-radius: 8px; outline: 0; background: transparent; color: var(--text); font: var(--chat-text)/1.6 var(--font-ui); }
 #chat-input:disabled { color: var(--muted); cursor: not-allowed; }
 #chat-input::placeholder { color: var(--faint); }
@@ -473,12 +487,20 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 #chat-interrupt:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: var(--danger); }
 #chat-interrupt svg { width: 13px; height: 13px; fill: currentColor; }
 #chat-interrupt:disabled, #chat-voice:disabled { opacity: .4; cursor: not-allowed; }
+/* Optimistic Stop request: hold the control mounted and pulse while the Escape
+   POST is in flight, so a second tap cannot double-fire it. */
+#chat-interrupt.is-pending { opacity: .75; cursor: wait; animation: chat-pulse 1s ease-in-out infinite; }
+/* Confirmed Stop: brief success affordance before control returns. */
+#chat-interrupt.is-done { border-color: var(--ok); color: var(--ok); }
 /* Opacity alone kept the accent fill legible, so the primary action still read
    as available with no session attached. A disabled send is a flat surface. */
 #chat-send:disabled {
   background: color-mix(in srgb, var(--panel-3) 80%, transparent);
   color: var(--faint); opacity: 1; cursor: not-allowed;
 }
+/* Enabled send carries the accent fill so the live action reads primary; the
+   disabled rule above stays a flat surface. */
+#chat-send:not(:disabled) { background: var(--accent-2); color: #fff; }
 #chat-voice[hidden], #chat-interrupt[hidden] { display: none; }
 #chat-voice svg { width: 18px; height: 18px; }
 #chat-voice.recording { color: var(--danger); }
@@ -527,8 +549,8 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 .cs-model, .cs-effort { flex: none; color: var(--muted); font-weight: 600; white-space: nowrap; }
 .cs-provider { min-width: 0; overflow: hidden; color: var(--faint); text-overflow: ellipsis; white-space: nowrap; }
 .cs-cwd { flex: 0 1 180px; min-width: 0; max-width: 180px; overflow: hidden; color: var(--faint); text-overflow: ellipsis; white-space: nowrap; }
-.cs-git { display: flex; align-items: center; flex: 1 1 auto; min-width: 0; gap: 4px; color: var(--muted); white-space: nowrap; }
-.cs-git-branch { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cs-git { display: flex; align-items: center; flex: none; min-width: 0; gap: 5px; color: var(--muted); white-space: nowrap; }
+.cs-git-branch { flex: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .cs-git-detail { flex: none; color: var(--faint); font: 10.5px var(--font-mono); }
 .cs-ctx { display: flex; align-items: center; flex: none; gap: 4px; white-space: nowrap; }
 .cs-ctx-bar { position: relative; display: inline-block; width: 36px; height: 4px; overflow: hidden; border-radius: 999px; background: var(--line); }
@@ -553,11 +575,11 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
   .chat-compose-shell {
     padding-bottom: max(8px, calc(env(safe-area-inset-bottom) - var(--kb-inset, 0px)));
   }
-  .chat-composer .attachment-button, #chat-send, #chat-voice, #chat-interrupt { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
-  .chat-panels-toggle { min-height: 44px; }
-  .chat-jump-latest, .chat-action-btn, .chat-code-copy, .chat-history-reveal, .chat-user-disclosure { min-height: 44px; }
-  .chat-message-actions { opacity: 1; pointer-events: auto; }
-  .chat-icon-action { width: 44px; height: 44px; }
+  /* The status rail used to sit under the composer, so the dock always read
+     as composer + dead padding. On mobile the rail rides above the composer
+     instead: the composer is the last element, with only the home-indicator
+     strip below it. */
+  .chat-compose-shell { display: flex; flex-direction: column; }
 }
 @media (max-width: 600px) {
   #chat-log { gap: 14px; padding: 20px 15px; scrollbar-gutter: auto; }
@@ -599,9 +621,8 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 .cs-item + .cs-item::before {
   content: "\00b7"; margin: 0 7px; color: var(--line-strong);
 }
-/* Below the reading measure the rail cannot hold six fields without
-   truncating every one of them to an ellipsis. Keep what changes and what
-   costs money; provider and path are stable and live in the header and menu. */
+/* Below the reading measure the rail keeps the model name; provider, cwd
+   and effort drop out here. */
 @media (max-width: 720px) {
   .cs-provider, .cs-cwd, .cs-effort { display: none; }
   /* Horizontal scroll inside a vertical transcript is unfindable on touch;

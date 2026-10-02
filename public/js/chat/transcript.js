@@ -28,6 +28,18 @@ const timeline = [];
 const openToolIds = new Set();
 const visibleTimeIds = new Set();
 const expandedUserIds = new Set();
+
+// Regenerate replays the last user input, so only the latest assistant turn
+// offers it; older replies keep history read-only instead of forking it.
+let lastAssistantId = null;
+
+function tailAssistantId() {
+  for (let index = timeline.length - 1; index >= 0; index--) {
+    const item = itemData.get(timeline[index]);
+    if (item && item.kind === "assistant") return item.id;
+  }
+  return null;
+}
 let currentToolGroup = null;
 let groupSequence = 0;
 let windowStart = 0;
@@ -249,6 +261,20 @@ function messageActions(item, text) {
     });
     actions.prepend(time);
     actions.append(toggle);
+  }
+
+  // A delivered user turn is resendable as a new turn through the composer;
+  // pending and failed messages keep their own inline Retry/Edit instead.
+  if (item.kind === "user" && !item.pending && !item.failed
+    && typeof item.text === "string" && item.text) {
+    const edit = elem("button", {
+      class: "ghost chat-action-btn",
+      type: "button",
+      title: "Edit and resend as a new message",
+      "aria-label": "Edit and resend as a new message",
+    }, "Edit");
+    edit.addEventListener("click", () => emit("chat:edit", { id: item.id }));
+    actions.append(edit);
   }
   return actions;
 }
@@ -969,6 +995,13 @@ function buildUser(item) {
 
 function buildAssistant(item) {
   const body = elem("div", { class: "chat-assistant-body" });
+  // Agent identity, reference-style: a small name line opens each run of
+  // assistant turns; CSS hides it on consecutive assistant items.
+  const label = elem("div", { class: "chat-agent-label", "aria-hidden": "true" },
+    elem("span", { class: "chat-agent-mark" }, "◆"),
+    elem("span", { class: "chat-agent-name" }, "omp"),
+  );
+  body.append(label);
   if (item.text) {
     body.append(renderMarkdown(item.text));
     const previews = buildImagePreviews(attachmentImagePaths(item.text));
@@ -977,7 +1010,24 @@ function buildAssistant(item) {
   if (item.truncated) {
     body.append(elem("span", { class: "chat-message-truncated chat-chip chat-chip-trunc" }, "Truncated preview"));
   }
-  body.append(messageActions(item, item.text || ""));
+  const actions = messageActions(item, item.text || "");
+  if (item.id === lastAssistantId) {
+    // The shared resumption path replays the last user input as a new turn;
+    // the transcript reaches it directly so no new event names are needed.
+    const regenerate = elem("button", {
+      class: "ghost chat-action-btn",
+      type: "button",
+      title: "Regenerate reply from the last message",
+      "aria-label": "Regenerate reply from the last message",
+    }, "Regenerate");
+    regenerate.addEventListener("click", () => {
+      if (typeof window !== "undefined" && typeof window.regenerateLast === "function") {
+        window.regenerateLast();
+      }
+    });
+    actions.append(regenerate);
+  }
+  body.append(actions);
   return elem("div", { class: "chat-item chat-assistant", "data-id": item.id }, body);
 }
 
@@ -1119,72 +1169,113 @@ function updateGroupStats(group, item, direction) {
     if (next > 0) group.changed.set(path, next);
     else group.changed.delete(path);
   }
-  if (item.changesTruncated && direction > 0) group.changedTruncated = true;
+}
+
+// Collapsed group headers speak plain language, never backend tool names.
+// toolKind folds the open-ended upstream tool namespace into fixed human
+// categories; the names below are matched, never rendered.
+function toolKind(name) {
+  switch (String(name || "").toLowerCase()) {
+    case "edit":
+    case "apply_patch":
+    case "ast_edit":
+    case "write":
+      return "edit";
+    case "bash":
+    case "exec":
+      return "command";
+    case "read":
+      return "read";
+    case "grep":
+    case "glob":
+    case "web_search":
+    case "search":
+      return "search";
+    case "task":
+      return "task";
+    default:
+      return "other";
+  }
+}
+
+// One plain phrase per kind present, e.g. "Edited 3 files". The file count
+// prefers structured change evidence (one batched edit can touch many
+// files) and falls back to the edit-call count (writes leave no changes).
+function groupKindPhrases(group) {
+  const totals = new Map();
+  for (const [name, count] of group.counts) {
+    const kind = toolKind(name);
+    totals.set(kind, (totals.get(kind) || 0) + count);
+  }
+  const phrases = [];
+  const edited = group.changed.size > 0 ? group.changed.size : (totals.get("edit") || 0);
+  if (edited > 0) phrases.push(`Edited ${edited} file${edited === 1 ? "" : "s"}`);
+  const commands = totals.get("command") || 0;
+  if (commands > 0) phrases.push(`Ran ${commands} command${commands === 1 ? "" : "s"}`);
+  const reads = totals.get("read") || 0;
+  if (reads > 0) phrases.push(`Looked at ${reads} file${reads === 1 ? "" : "s"}`);
+  const searches = totals.get("search") || 0;
+  if (searches > 0) phrases.push(`Ran ${searches} search${searches === 1 ? "" : "es"}`);
+  const tasks = totals.get("task") || 0;
+  if (tasks > 0) phrases.push(`Ran ${tasks} task${tasks === 1 ? "" : "s"}`);
+  const other = totals.get("other") || 0;
+  if (other > 0) phrases.push(`Did ${other} other step${other === 1 ? "" : "s"}`);
+  return phrases;
+}
+
+// A live group's current step is the latest running tool's own intent text,
+// already human and written by the agent. A raw tool name is never a
+// headline; with nothing human to show the fallback is "Thinking".
+function liveStepHeadline(group) {
+  let step = "";
+  for (const id of group.memberIds) {
+    const member = itemData.get(id);
+    if (member && member.kind === "tool" && (member.state || "running") === "running" && member.intent) {
+      step = member.intent;
+    }
+  }
+  return step;
 }
 
 function renderToolGroupSummary(group) {
   if (!group.summary) return;
-  const names = Array.from(group.counts, ([name, count]) => count === 1 ? name : `${name} ×${count}`);
-  const countText = names.join(" · ");
-  const toolLabel = `${group.total} tool${group.total === 1 ? "" : "s"}`;
+  const phrases = groupKindPhrases(group);
   const duration = group.durationMs > 0 ? formatDuration(group.durationMs) : "";
   const label = group.running ? "Working" : (group.total === 0 ? "Thought" : "Worked");
+  // The agent's own words first: the latest reasoning headline, then the
+  // live step's intent while work is in flight. Settled groups rest on the
+  // counts; a live group with nothing human yet says "Thinking".
+  const headline = group.headline || (group.running ? (liveStepHeadline(group) || "Thinking") : "");
   const stateParts = [];
   if (group.running) stateParts.push(`${group.running} running`);
   if (group.failed) stateParts.push(`${group.failed} failed`);
   if (group.thinking) stateParts.push(`${group.thinking} thought${group.thinking === 1 ? "" : "s"}`);
   if (!stateParts.length) stateParts.push("complete");
-  // A reasoning-only group has no tools; "0 tools" is noise, not information.
-  const toolParts = group.total ? [toolLabel, countText || toolLabel] : [];
-  const durationDescription = duration ? `${duration} accumulated tool time` : "";
+  const durationDescription = duration ? `${duration} total` : "";
   group.summary.setAttribute("aria-label", [
     label,
-    ...toolParts,
-    group.headline,
+    ...phrases,
+    headline,
     ...stateParts,
     durationDescription,
   ].filter(Boolean).join("; "));
   group.summary.title = [
-    group.total ? `${toolLabel}: ${countText || toolLabel}` : "",
+    phrases.join(" · "),
     ...stateParts,
     durationDescription,
   ].filter(Boolean).join(" · ");
-  // Native replaceChildren stringifies null (unlike elem()), and a
-  // reasoning-only group has no tool names to count.
+  // Native replaceChildren stringifies null (unlike elem()).
   group.summary.replaceChildren(elem("span", { class: "chat-tool-group-label" }, label));
-  if (countText) group.summary.append(elem("span", { class: "chat-tool-group-counts" }, countText));
-  if (group.headline) group.summary.append(
-    elem("span", { class: "chat-tool-group-headline" }, group.headline),
+  if (phrases.length) group.summary.append(elem("span", { class: "chat-tool-group-counts" }, phrases.join(" · ")));
+  if (headline) group.summary.append(
+    elem("span", { class: "chat-tool-group-headline" }, headline),
   );
   if (duration) group.summary.append(
-    elem("span", { class: "chat-tool-group-duration" }, `${duration} tool time`),
+    elem("span", { class: "chat-tool-group-duration" }, duration),
   );
   if (group.failed) group.summary.append(
     elem("span", { class: "chat-tool-group-failure" }, `${group.failed} failed`),
   );
-  // Collapsed receipt: the files this turn changed, so "what happened while I
-  // was away" is answerable without opening a single disclosure.
-  const paths = [...group.changed.keys()];
-  if (paths.length) {
-    const receipt = elem("span", { class: "chat-turn-receipt" });
-    for (const path of paths.slice(0, 3)) {
-      receipt.append(elem("span", {
-        class: "chat-receipt-file",
-        text: path.slice(path.lastIndexOf("/") + 1),
-        title: path,
-      }));
-    }
-    const rest = paths.length - Math.min(paths.length, 3);
-    if (rest > 0 || group.changedTruncated) {
-      receipt.append(elem("span", {
-        class: "chat-receipt-more",
-        text: rest > 0 ? `+${rest} more` : "more omitted",
-      }));
-    }
-    receipt.setAttribute("aria-label",
-      `${paths.length} file${paths.length === 1 ? "" : "s"} changed: ${paths.join(", ")}`);
-    group.summary.append(receipt);
-  }
 }
 
 function renderToolGroupBody(group) {
@@ -1228,12 +1319,39 @@ function buildNotice(item) {
   );
 }
 
+// Error cards always offer a resumption path. The descriptor rides along as an
+// optional `action` so old payloads without one still resolve: well-known ids
+// fall back to their retry kind, anything else regenerates the last turn.
+function errorRetryKind(item) {
+  const name = item && item.action && item.action.action;
+  if (name === "retry-poll" || name === "retry-interrupt" || name === "regenerate") return name;
+  if (item && item.id === "chat-poll-error") return "retry-poll";
+  if (item && item.id === "chat-interrupt-error") return "retry-interrupt";
+  return "regenerate";
+}
+
 function buildError(item) {
   const node = elem("div", { class: "chat-item chat-error", "data-id": item.id, role: "alert" },
     elem("strong", { class: "chat-error-label" }, item.status ? `Error ${item.status}` : "Session error"),
     elem("div", { class: "chat-error-text" }, item.text || "The session could not continue."),
   );
   if (item.truncated) node.append(elem("span", { class: "chat-message-truncated chat-chip chat-chip-trunc" }, "Truncated preview"));
+  // Direct window calls keep this working without new emit/get names, which
+  // would unbalance the check:events contract main.js relies on.
+  const retry = elem("button", { class: "ghost chat-action-btn chat-error-retry", type: "button" }, "Retry");
+  retry.setAttribute("aria-label", "Retry");
+  retry.addEventListener("click", () => {
+    const sessionId = item && item.action && item.action.sessionId;
+    const kind = errorRetryKind(item);
+    if (kind === "retry-poll") window.retryPollTurn?.(sessionId);
+    else if (kind === "retry-interrupt") window.retryInterrupt?.(sessionId);
+    else window.regenerateLast?.(sessionId);
+  });
+  node.append(elem("div", {
+    class: "chat-error-actions",
+    role: "group",
+    "aria-label": "Error actions",
+  }, retry));
   return node;
 }
 
@@ -1281,10 +1399,10 @@ function createToolGroup(item) {
     running: 0,
     failed: 0,
     durationMs: 0,
-    // Turn receipt: which files this turn actually touched. Sourced only from
-    // structured successful edit results (item.changes), never from prose.
+    // Which files this turn actually touched, sourced only from structured
+    // successful edit results (item.changes), never from prose. Feeds the
+    // collapsed "Edited N files" count.
     changed: new Map(),
-    changedTruncated: false,
     open: false,
     summary: null,
     body: null,
@@ -1417,6 +1535,15 @@ export function syncActivityNode() {
 }
 
 
+// Delivered user text for edit-and-resend: the composer owns the draft, so
+// chat.js resolves the text here while the original turn stays untouched (a
+// resend is a new turn, never a rewrite).
+export function deliveredUserText(id) {
+  const item = itemData.get(id);
+  if (!item || item.kind !== "user" || item.pending || item.failed) return "";
+  return typeof item.text === "string" ? item.text : "";
+}
+
 export function upsertItems(items) {
   const container = el["chat-log"];
   if (!container || !Array.isArray(items)) return;
@@ -1461,6 +1588,7 @@ export function upsertItems(items) {
       insertTimeline(item.id, item.at);
     }
   }
+  if (structuralChange) lastAssistantId = tailAssistantId();
   if (followTail) windowStart = tailStart();
   if (structuralChange) syncRenderedWindow(container);
   if (followTail) scrollToTail(container, false);
@@ -1494,10 +1622,13 @@ export function removeItem(id) {
     if (index !== -1) timeline.splice(index, 1);
     detachEntry(id);
   }
-  itemData.delete(id);
   openToolIds.delete(id);
   visibleTimeIds.delete(id);
   expandedUserIds.delete(id);
+  itemData.delete(id);
+  // A removed assistant may have owned the Regenerate affordance; the sync
+  // below rebuilds the tail, so refresh which turn it points at first.
+  lastAssistantId = tailAssistantId();
   if (container) {
     if (followTail) windowStart = tailStart();
     syncRenderedWindow(container);
@@ -1517,6 +1648,7 @@ export function clearLog() {
   openToolIds.clear();
   visibleTimeIds.clear();
   expandedUserIds.clear();
+  lastAssistantId = null;
   currentToolGroup = null;
   groupSequence = 0;
   windowStart = 0;

@@ -506,6 +506,10 @@ function project(entries, prev) {
         state.exited = null;
         state.error = null;
         state.working = { startedAt: at, intent: "Thinking" };
+        // An advisory belongs to the turn that produced it. A new user turn
+        // expires it; otherwise the latest note in history renders forever,
+        // long after the advisor is disabled or the moment has passed.
+        state.latestAdvisor = null;
         const raw = textFromContent(msg.content);
         if (raw) {
           const t = cut(raw, TEXT_LIMIT);

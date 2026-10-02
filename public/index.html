@@ -19,10 +19,10 @@
     </script>
     <link rel="stylesheet" href="/vendor/xterm.css" />
     <link rel="stylesheet" href="/base.css?v=24" />
-    <link rel="stylesheet" href="/sidebar.css?v=42" />
-    <link rel="stylesheet" href="/terminal.css?v=65" />
+    <link rel="stylesheet" href="/sidebar.css?v=51" />
+    <link rel="stylesheet" href="/terminal.css?v=66" />
     <link rel="stylesheet" href="/modals.css?v=23" />
-    <link rel="stylesheet" href="/chat.css?v=51" />
+    <link rel="stylesheet" href="/chat.css?v=56" />
   </head>
   <body>
     <div id="app">
@@ -33,7 +33,6 @@
           </button>
           <div class="brand"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="12" width="4.5" height="16" rx="2.25" opacity=".45"/><rect x="11" y="6" width="4.5" height="22" rx="2.25"/><rect x="18" y="15" width="4.5" height="13" rx="2.25" opacity=".7"/><rect x="25" y="19" width="4.5" height="9" rx="2.25" opacity=".3"/></svg>omp-web</div>
           <button id="new-btn" class="primary" title="New session"><span class="new-plus" aria-hidden="true">+</span><span class="visually-hidden">New session</span></button>
-          <button id="palette-btn" class="ghost icon-action" type="button" title="Command palette (Ctrl/⌘K)" aria-label="Open command palette" aria-keyshortcuts="Control+K Meta+K"><span aria-hidden="true">⌘K</span></button>
         </header>
         <div class="session-search-wrap">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
@@ -220,11 +219,11 @@
                 <button id="chat-voice" class="ghost icon-btn" aria-label="Dictate message" title="Dictate" hidden><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0M12 17v4"/></svg></button>
                 <button id="chat-interrupt" class="chat-interrupt" type="button" aria-label="Stop active work" title="Stop active work" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
                 <button id="chat-send" class="primary icon-btn" aria-label="Send message" title="Send">↑</button>
+                <div class="chat-runtime">
+                  <footer id="chat-status"></footer>
+                </div>
               </div>
-              <div class="chat-runtime">
-                <footer id="chat-status"></footer>
-              </div>
-              <input class="attachment-input" data-attachment-input type="file" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.rtf,.txt,.md,.csv,.tsv,.json,.xml,.yaml,.yml,.log,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.presentation,application/rtf,text/plain,text/markdown,text/csv,text/tab-separated-values,application/json,application/xml,application/yaml" hidden />
+              <input class="attachment-input" data-attachment-input type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.rtf,.txt,.md,.csv,.tsv,.json,.xml,.yaml,.yml,.log,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.oasis.opendocument.text,application/vnd.oasis.opendocument.spreadsheet,application/vnd.oasis.opendocument.presentation,application/rtf,text/plain,text/markdown,text/csv,text/tab-separated-values,application/json,application/xml,application/yaml" hidden />
             </div>
           </section>
           <section id="ghost-mode" aria-labelledby="ghost-title" hidden>
@@ -262,7 +261,7 @@
               <button id="terminal-unsent-retry" type="button">Retry</button>
             </div>
             <span class="attachment-status" data-attachment-status role="status" aria-live="polite" hidden></span>
-            <input class="attachment-input" data-attachment-input type="file" accept="image/*" hidden />
+            <input class="attachment-input" data-attachment-input type="file" multiple accept="image/*" hidden />
           </div>
           <div id="quickkeys" class="quickkeys" role="toolbar" aria-label="Terminal keys">
             <button data-seq="\x1b">Esc</button>
@@ -366,5 +365,5 @@
     <script src="/vendor/xterm.js"></script>
     <script src="/vendor/addon-fit.js"></script>
     <script src="/vendor/addon-web-links.js"></script>
-    <script type="module" src="/js/main.js?v=171"></script>
+    <script type="module" src="/js/main.js?v=179"></script>
 </html>

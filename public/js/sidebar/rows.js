@@ -125,15 +125,6 @@ function buildSessionRow(session, { onOpen, menu, showFolder = false, narrow = f
     "aria-hidden": "true",
   }));
   row.append(elem("span", { class: "title", text: session.title }));
-  // Folder copies of a pinned row carry the marker; the Pinned section itself
-  // needs none, so callers pass pinnedMarker only for folder context.
-  if (pinnedMarker && session.pinned) {
-    row.append(elem("span", {
-      class: "pinned-marker",
-      text: "Pinned",
-      title: "Pinned — also listed under Pinned",
-    }));
-  }
   if (status === "waiting") {
     row.append(elem("span", {
       class: "needs-you",

@@ -5,13 +5,16 @@
 
 import { api } from "./api.js";
 import { state } from "./state.js";
-import { upsertItems, clearLog, removeItem, syncActivityNode, pinToTail } from "./chat/transcript.js";
+import { upsertItems, clearLog, removeItem, syncActivityNode, pinToTail, deliveredUserText } from "./chat/transcript.js";
 export { refreshLanding } from "./chat/panels.js";
-import { renderPanels, setChatLoading } from "./chat/panels.js";
+import { renderPanels, setChatLoading, setInterruptSession } from "./chat/panels.js";
 import {
   activateComposer,
   editComposerDraft,
   resetComposerSession,
+  beginInterruptRequest,
+  endInterruptRequest,
+  resetInterruptButton,
 } from "./chat/composer.js";
 import { sha256Hex } from "./chat/hash.js";
 
@@ -45,6 +48,10 @@ let catchUpUntil = 0;
 let pendingItems = [];
 let pendingRestore = false;
 const localUserItems = new Map();
+// Latest user text per session, from sends and polled transcript echoes alike.
+// regenerateLast resends it as a new turn after a session error, once the
+// optimistic record has already been reconciled away.
+const lastUserTextBySession = new Map();
 
 function recordItem(record) {
   return {
@@ -210,6 +217,8 @@ export function enterChat(id, forceReset = false) {
   if (forceReset) clearLocalSession(id);
 
   sessionId = id;
+  setInterruptSession(true);
+  if (changed || forceReset) resetInterruptButton();
   activateComposer(id, { reset: forceReset });
   if (changed || forceReset) restoreLocalUserItems(id);
   if (state.mode === "chat") schedulePoll(0);
@@ -224,6 +233,8 @@ export function resetChat({ discardPrevious = true } = {}) {
   const previousId = sessionId;
   stopPoll();
   sessionId = null;
+  setInterruptSession(false);
+  resetInterruptButton();
   byteCursor = 0;
   failCount = 0;
   catchUpUntil = 0;
@@ -231,6 +242,7 @@ export function resetChat({ discardPrevious = true } = {}) {
   pendingRestore = false;
   setChatLoading(false);
   if (previousId && discardPrevious) clearLocalSession(previousId);
+  if (previousId && discardPrevious) lastUserTextBySession.delete(previousId);
   clearLog();
   renderPanels(null);
   syncActivityNode();
@@ -281,6 +293,10 @@ export async function sendChat(text) {
       record.failed = true;
       record.errorText = "Message exceeds the 32 KiB send limit. Edit it before retrying.";
       showRecord(record);
+      // The composer was already cleared before send, so the oversize text would
+      // otherwise live only in the failed card. Reload it for editing instead
+      // of leaving Retry with nothing it could resend.
+      editComposerDraft(text, id);
       return false;
     }
     // Hash before POST so even a very fast transcript poll can reconcile the
@@ -296,6 +312,7 @@ export async function sendChat(text) {
     return false;
   }
 
+  lastUserTextBySession.set(id, text);
   return attemptSend(record);
 }
 
@@ -303,7 +320,11 @@ export async function retryChat(id) {
   const record = localUserItems.get(id);
   if (!record || !record.failed || record.sessionId !== sessionId) return false;
   if (record.byteLength > MAX_TEXT_BYTES) {
+    // Resending can never succeed while oversize, so keep the inline
+    // explanation visible and put the text back in the composer for editing.
+    record.errorText = "Message exceeds the 32 KiB send limit. Edit it before retrying.";
     showRecord(record);
+    editComposerDraft(record.text, record.sessionId);
     return false;
   }
   return attemptSend(record);
@@ -311,32 +332,82 @@ export async function retryChat(id) {
 
 export function editChat(id) {
   const record = localUserItems.get(id);
-  if (!record || !record.failed || record.sessionId !== sessionId) return false;
-  if (!editComposerDraft(record.text, record.sessionId)) return false;
-  localUserItems.delete(id);
-  removeItem(id);
-  return true;
+  if (record) {
+    if (!record.failed || record.sessionId !== sessionId) return false;
+    if (!editComposerDraft(record.text, record.sessionId)) return false;
+    localUserItems.delete(id);
+    removeItem(id);
+    return true;
+  }
+  // A delivered turn has no local record: the resend is a new turn, so the
+  // original stays while its text loads into the composer for editing.
+  if (!sessionId) return false;
+  const text = deliveredUserText(id);
+  if (!text) return false;
+  return editComposerDraft(text, sessionId);
 }
 
 export async function interruptChat() {
   if (!sessionId) return;
   const id = sessionId;
   const generation = pollGeneration;
+  // Optimistic pending also covers direct callers (e.g. the Retry card's
+  // retryInterrupt); the composer click already entered it, idempotently.
+  beginInterruptRequest();
   try {
     await api(`/sessions/${encodeURIComponent(id)}/chat/keys`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ keys: ["Escape"] }),
     });
+    if (sessionId !== id || pollGeneration !== generation) {
+      resetInterruptButton();
+      return;
+    }
+    endInterruptRequest(true);
   } catch (error) {
     if (sessionId === id && pollGeneration === generation) {
-      upsertItems([clientError("chat-interrupt-error", "Interrupt failed", error)]);
+      endInterruptRequest(false);
+      upsertItems([clientError("chat-interrupt-error", "Interrupt failed", error, { action: "retry-interrupt", sessionId: id })]);
+    } else {
+      resetInterruptButton();
     }
   }
 }
 
-// ---- Poll loop ------------------------------------------------------------
+// Resumption paths for transcript error cards (shared with slice C, which
+// reuses these; the builder reaches them via window so no new emit/get names
+// are needed and check:events stays balanced).
+export function retryPollTurn(cardSessionId) {
+  if (!sessionId || (cardSessionId && cardSessionId !== sessionId)) return false;
+  // Drop the backoff so the next attempt goes out immediately; a successful
+  // poll clears the card itself.
+  failCount = 0;
+  schedulePoll(0);
+  return true;
+}
 
+export function retryInterrupt(cardSessionId) {
+  if (!sessionId || (cardSessionId && cardSessionId !== sessionId)) return false;
+  void interruptChat();
+  return true;
+}
+
+export async function regenerateLast(cardSessionId) {
+  const target = cardSessionId || sessionId;
+  if (!target || target !== sessionId) return false;
+  const text = lastUserTextBySession.get(target);
+  if (!text) return false;
+  return sendChat(text);
+}
+
+if (typeof window !== "undefined") {
+  window.retryPollTurn = retryPollTurn;
+  window.retryInterrupt = retryInterrupt;
+  window.regenerateLast = regenerateLast;
+}
+
+// ---- Poll loop ------------------------------------------------------------
 function stopPoll() {
   pollGeneration++;
   clearTimeout(pollTimer);
@@ -363,14 +434,16 @@ function schedulePoll(delay) {
   }, delay);
 }
 
-function clientError(id, label, error) {
+function clientError(id, label, error, action) {
   const detail = error && error.message ? `: ${error.message}` : "";
-  return {
+  const item = {
     id,
     at: new Date().toISOString(),
     kind: "error",
     text: `${label}${detail}`,
   };
+  if (action) item.action = action;
+  return item;
 }
 
 async function doPoll(generation) {
@@ -419,6 +492,16 @@ async function doPoll(generation) {
     setChatLoading(false);
     const batch = pendingItems.length ? pendingItems.concat(items || []) : items;
     pendingItems = [];
+    for (const item of batch || []) {
+      if (!item || typeof item !== "object") continue;
+      if (item.kind === "user" && typeof item.text === "string" && item.text) {
+        lastUserTextBySession.set(id, item.text);
+      } else if (item.kind === "error" && !item.action) {
+        // Server session errors carry no resumption path; the card retries by
+        // resending the last user text as a new turn.
+        item.action = { action: "regenerate", sessionId: id };
+      }
+    }
     if (batch?.length) upsertItems(batch);
     if (pendingRestore) {
       pendingRestore = false;
@@ -454,7 +537,7 @@ async function doPoll(generation) {
       setChatLoading(false);
       failCount++;
       if (failCount === 1) {
-        upsertItems([clientError("chat-poll-error", "Chat update failed", error)]);
+        upsertItems([clientError("chat-poll-error", "Chat update failed", error, { action: "retry-poll", sessionId: id })]);
       }
       nextDelay = Math.min(POLL_MS * 2 ** (failCount - 1), BACKOFF_CAP);
     }
