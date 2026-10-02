@@ -206,12 +206,14 @@ export function endInterruptRequest(ok) {
   interrupt.setAttribute("aria-label", "Stopped");
   // Hold the confirmation through one paint so it reads, then hand control
   // back; the visibility rule re-hides only once the turn is truly idle.
-  renderInterruptPending(interrupt, true);
+  // Disable through the flash without re-entering the pending style: the
+  // confirmed state holds steady (no pulse) until control is handed back.
+  interrupt.disabled = true;
   clearTimeout(interruptDoneTimer);
   interruptDoneTimer = setTimeout(() => {
     interrupt.classList.remove("is-done");
     interrupt.setAttribute("aria-label", STOP_LABEL);
-    renderInterruptPending(interrupt, false);
+    interrupt.disabled = false;
   }, 900);
 }
 

@@ -237,6 +237,9 @@ function syncInterruptVisibility() {
 /** Chat session selected; drives Stop visibility with poll/activity signals. */
 export function setInterruptSession(on) {
   interruptHasSession = Boolean(on);
+  // The activity timestamp belongs to the previous session; a fresh one must
+  // re-earn Stop visibility from its own polls.
+  interruptLastActivityAt = 0;
   syncInterruptVisibility();
 }
 

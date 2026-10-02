@@ -1169,6 +1169,7 @@ function updateGroupStats(group, item, direction) {
     if (next > 0) group.changed.set(path, next);
     else group.changed.delete(path);
   }
+  if (item.changesTruncated && direction > 0) group.changedTruncated = true;
 }
 
 // Collapsed group headers speak plain language, never backend tool names.
@@ -1208,8 +1209,13 @@ function groupKindPhrases(group) {
     totals.set(kind, (totals.get(kind) || 0) + count);
   }
   const phrases = [];
-  const edited = group.changed.size > 0 ? group.changed.size : (totals.get("edit") || 0);
-  if (edited > 0) phrases.push(`Edited ${edited} file${edited === 1 ? "" : "s"}`);
+  const fromChanges = group.changed.size > 0;
+  const edited = fromChanges ? group.changed.size : (totals.get("edit") || 0);
+  if (edited > 0) {
+    // A truncated change list understates the count; say so with a +.
+    const more = fromChanges && group.changedTruncated;
+    phrases.push(`Edited ${edited}${more ? "+" : ""} file${edited === 1 && !more ? "" : "s"}`);
+  }
   const commands = totals.get("command") || 0;
   if (commands > 0) phrases.push(`Ran ${commands} command${commands === 1 ? "" : "s"}`);
   const reads = totals.get("read") || 0;
@@ -1403,6 +1409,7 @@ function createToolGroup(item) {
     // successful edit results (item.changes), never from prose. Feeds the
     // collapsed "Edited N files" count.
     changed: new Map(),
+    changedTruncated: false,
     open: false,
     summary: null,
     body: null,

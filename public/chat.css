@@ -580,6 +580,13 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
      instead: the composer is the last element, with only the home-indicator
      strip below it. */
   .chat-compose-shell { display: flex; flex-direction: column; }
+  /* Compact layouts keep 44px touch targets on the composer and message
+     actions; hover-revealed actions stay visible since touch has no hover. */
+  .chat-composer .attachment-button, #chat-send, #chat-voice, #chat-interrupt { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
+  .chat-panels-toggle { min-height: 44px; }
+  .chat-jump-latest, .chat-action-btn, .chat-code-copy, .chat-history-reveal, .chat-user-disclosure { min-height: 44px; }
+  .chat-message-actions { opacity: 1; pointer-events: auto; }
+  .chat-icon-action { width: 44px; height: 44px; }
 }
 @media (max-width: 600px) {
   #chat-log { gap: 14px; padding: 20px 15px; scrollbar-gutter: auto; }
