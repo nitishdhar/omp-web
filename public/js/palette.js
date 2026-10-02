@@ -15,7 +15,7 @@ let entries = [];
 
 // Subsequence match, not substring: "owm" finds "Omp Web Main" the way a
 // terminal user expects, and the score prefers earlier, tighter runs.
-function score(haystack, needle) {
+export function score(haystack, needle) {
   if (!needle) return 0;
   const hay = haystack.toLowerCase();
   const term = needle.toLowerCase();
@@ -154,6 +154,9 @@ export function wirePalette() {
   const host = el.palette;
   const input = el["palette-input"];
   if (!host || !input) return;
+  // Visible sidebar-head entry point for the keyboard palette.
+  const btn = el["palette-btn"];
+  if (btn) btn.addEventListener("click", () => openPalette());
 
   input.addEventListener("input", () => { active = 0; render(input.value); });
   host.addEventListener("mousedown", (event) => {

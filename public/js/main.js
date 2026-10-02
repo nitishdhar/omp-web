@@ -303,6 +303,19 @@ async function pinSession(id, pinned) {
   } catch (e) { showNotice("Pin failed: " + e.message, { tone: "error" }); }
 }
 
+// Rename owns the PATCH + refresh: the sidebar row only emits the intent.
+async function renameSession(id, title) {
+  try {
+    await api(`/sessions/${encodeURIComponent(id)}/title`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ title }),
+    });
+    await refresh();
+    showNotice("Renamed");
+  } catch (e) { showNotice("Rename failed: " + e.message, { tone: "error" }); }
+}
+
 function onAttachUi(session) {
   openSession(session);
   refresh();
@@ -591,6 +604,7 @@ el["r-model"].addEventListener("keydown", (event) => {
 
 // Sidebar event bridge: view modules emit intents; main owns the actions.
 get("session:pin", (p) => pinSession(p.id, p.pinned));
+get("session:rename", (p) => renameSession(p.id, p.title));
 get("session:kill", (id) => killSession(id));
 get("session:open", (id) => {
   const session = state.sessions.find((s) => s.id === id);
@@ -615,6 +629,9 @@ el["ghost-copy-btn"].onclick = () => {
 el["ghost-forget-btn"].onclick = () => {
   if (state.selectedGhost) forgetGhost(state.selectedGhost);
 };
+// Back returns to the parked live session (or empty chrome when none): the
+// same clearGhost flow as opening a session, guarded for cached old shells.
+if (el["ghost-back-btn"]) el["ghost-back-btn"].onclick = () => clearGhostView();
 // UI-only sidebar state must rerender immediately without waiting for polling.
 get("sidebar:rerender", () => {
   lastRenderedJson = sidebar.renderKey(state.sessions);

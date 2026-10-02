@@ -24,7 +24,7 @@ export function initDom() {
     "f-profile", "f-profile-summary", "f-notitle", "m-error", "authgate", "auth-input", "auth-error",
     "auth-submit", "profile-btn", "reload-modal", "r-profile", "r-profile-summary", "r-model", "r-notitle",
     "r-error", "r-cancel", "r-reload", "new-btn", "empty-new-btn", "m-cancel", "m-create",
-    "sidebar-close", "theme-btn", "palette", "palette-input", "palette-results",
+    "sidebar-close", "theme-btn", "palette", "palette-btn", "palette-input", "palette-results",
     "settings", "settings-btn", "settings-close", "settings-profiles", "settings-legend", "settings-about",
     "settings-preview-roots", "settings-preview-root-form", "settings-preview-root-input", "settings-preview-root-add",
     "menu-btn", "reload-btn", "update-btn", "usage-btn", "usage-popover",
@@ -38,7 +38,7 @@ export function initDom() {
     "chat-empty", "chat-empty-resume", "chat-landing-target", "chat-loading", "chat-jump-latest", "chat-input", "chat-attach", "chat-send",
     "chat-interrupt", "chat-voice", "chat-voice-status", "chat-advisor",
     "ghost-mode", "ghost-title", "ghost-summary", "ghost-meta",
-    "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn",
+    "ghost-back-btn", "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn",
   ].forEach(reg);
 }
 

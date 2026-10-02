@@ -33,10 +33,11 @@
           </button>
           <div class="brand"><svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="12" width="4.5" height="16" rx="2.25" opacity=".45"/><rect x="11" y="6" width="4.5" height="22" rx="2.25"/><rect x="18" y="15" width="4.5" height="13" rx="2.25" opacity=".7"/><rect x="25" y="19" width="4.5" height="9" rx="2.25" opacity=".3"/></svg>omp-web</div>
           <button id="new-btn" class="primary" title="New session"><span class="new-plus" aria-hidden="true">+</span><span class="visually-hidden">New session</span></button>
+          <button id="palette-btn" class="ghost icon-action" type="button" title="Command palette (Ctrl/⌘K)" aria-label="Open command palette" aria-keyshortcuts="Control+K Meta+K"><span aria-hidden="true">⌘K</span></button>
         </header>
         <div class="session-search-wrap">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>
-          <input id="session-search" type="search" placeholder="Search sessions" aria-label="Search sessions" autocomplete="off" />
+          <input id="session-search" type="search" placeholder="Search sessions · / · ⌘K" title="/ to search · Ctrl/⌘K palette · status:working is:pinned filters" aria-label="Search sessions" autocomplete="off" />
         </div>
         <div class="view-toggle" role="tablist" aria-label="Session views"></div>
         <ul id="session-list" class="sessions"></ul>
@@ -232,6 +233,7 @@
             <p id="ghost-summary" class="ghost-summary"></p>
             <dl id="ghost-meta" class="ghost-meta"></dl>
             <div class="ghost-actions">
+              <button id="ghost-back-btn" class="ghost" type="button" title="Back to the live session">Back</button>
               <button id="ghost-restore-btn" class="primary" type="button">Restore session</button>
               <button id="ghost-copy-btn" class="ghost" type="button">Copy folder path</button>
               <button id="ghost-forget-btn" class="danger ghost" type="button">Forget</button>
@@ -364,5 +366,5 @@
     <script src="/vendor/xterm.js"></script>
     <script src="/vendor/addon-fit.js"></script>
     <script src="/vendor/addon-web-links.js"></script>
-    <script type="module" src="/js/main.js?v=170"></script>
+    <script type="module" src="/js/main.js?v=171"></script>
 </html>

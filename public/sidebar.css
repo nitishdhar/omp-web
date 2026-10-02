@@ -47,6 +47,11 @@
 .folder-group { list-style: none; margin: 0; }
 .folder-head { display: flex; align-items: center; width: 100%; min-width: 0; }
 .folder-toggle { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; min-height: 32px; padding: 4px 4px; border: 0; background: transparent; color: var(--muted); text-align: left; }
+/* Split hit areas keep .folder-toggle geometry: the chevron is a fixed
+   toggle-only target, the name button takes the remaining width and only
+   selects the folder (the new-session target). */
+.folder-collapse { flex: none; min-width: 28px; padding-inline: 2px; }
+.folder-select { padding-inline: 2px; }
 .folder-toggle:hover, .folder-head.active .folder-toggle { color: var(--text); }
 .folder-toggle:focus-visible { outline-offset: -2px; }
 .folder-chevron { flex: none; width: 10px; color: var(--faint); transform: rotate(90deg); transition: transform .12s ease; text-align: center; }
@@ -96,6 +101,13 @@
   background: color-mix(in srgb, var(--warn) 16%, transparent);
   color: var(--warn); font-size: 9.5px; font-weight: 700; letter-spacing: .01em;
 }
+/* Folder copies of pinned rows carry the marker; the Pinned section needs
+   none, so rows only render it in folder context. */
+.pinned-marker { flex: none; padding: 1px 6px; border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 999px; color: var(--accent); font-size: 9.5px; font-weight: 700; letter-spacing: .01em; }
+/* The active band alone washed out on dense rails; the open title carries
+   full text color and weight too. Later in the cascade than base.css, so it
+   wins over the calm-state title recession at equal specificity. */
+.sess.active .title { color: var(--text); font-weight: 650; }
 .unread-dot { flex: none; color: var(--accent); font-size: 9px; line-height: 1; }
 .session-folder {
   flex: none; max-width: 72px; overflow: hidden; color: var(--faint);
@@ -211,9 +223,9 @@
 }
 .sess:hover .row-pin, .row-pin:focus-visible { opacity: 1; }
 .row-pin:hover { background: var(--panel-3); color: var(--text); }
-/* Hover-only, like the row menu. Pinned rows read their state from the Pinned
-   section; on hover the lit accent distinguishes pinned from not. */
-.row-pin.is-pinned { color: var(--accent); }
+/* The pin doubles as the state indicator, so a pinned row keeps it lit at
+   rest instead of hover-only; unpinned rows still reveal on hover. */
+.row-pin.is-pinned { color: var(--accent); opacity: 1; }
 .row-pin.is-pinned:hover { color: var(--text); }
 @media (max-width: 1099px) {
   .row-pin { width: 40px; height: 40px; opacity: 1; }
@@ -251,6 +263,9 @@
   border-radius: 7px;
   pointer-events: none;
 }
+/* Ghosts reuse the Unknown hollow treatment but square: "not running" must
+   not read as just another idle agent at a glance. */
+.dot.ghost-dot { border-radius: 2px; }
 .sess.ghost:hover { opacity: .8; background: transparent; }
 /* The selected ghost previews in the main pane; lift the dim and mark the
    outline so the row reads as the current view, like .active live rows. */
@@ -266,3 +281,15 @@
   background: var(--panel-2); color: var(--text); font-size: 11px; font-weight: 550;
 }
 .restore-all:hover { background: var(--panel-3); border-color: var(--accent); }
+/* Inline Restore on ghost rows: the row itself still opens the detail
+   preview, this button restores straight away. Always visible — a ghost's
+   only forward action should not hide under hover. */
+.ghost-restore { align-self: center; flex: none; min-height: 26px; margin-right: 2px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 550; }
+.ghost-restore:hover { background: var(--panel-3); border-color: var(--accent); color: var(--text); }
+@media (max-width: 1099px) { .ghost-restore { min-height: 40px; padding: 6px 12px; } }
+/* Search answers "how much" first: one quiet count line above the results. */
+.search-count { list-style: none; padding: 4px 6px 6px; color: var(--faint); font-size: 11px; }
+/* Inline rename input replaces the title in place; it reads as an edit, not
+   a second row, and fills the title's width. */
+.rename-input { flex: 1; min-width: 0; padding: 1px 5px; border: 1px solid var(--accent); border-radius: 4px; background: var(--panel-2); color: var(--text); font-size: 12.5px; }
+.sess.renaming .sess-open { cursor: text; }

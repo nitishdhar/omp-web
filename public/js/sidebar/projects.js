@@ -5,12 +5,36 @@ import { state, emit } from "../state.js";
 import { elem } from "../dom.js";
 import { icon } from "../icons.js";
 import * as menu from "./menu.js";
-import { sessionRow, ghostRow } from "./rows.js";
+import { sessionRow, ghostRow, sessionPeeksUnread, startInlineRename } from "./rows.js";
 import { copyWithNotice } from "../notice.js";
+import { score } from "../palette.js";
+import { sessionStatus } from "../session-status.js";
 
 const collapsedProjects = new Set();
 const knownProjects = new Set();
 let activeProject = null;
+// Folder collapse is chrome, not truth: tmux owns sessions, localStorage owns
+// which folders start shut. First run derives quiet folders collapsed; the
+// stored set wins after that and every toggle saves immediately.
+const COLLAPSED_KEY = "omp_web_collapsed_projects_v1";
+let collapseHasStored = false;
+function loadCollapsed() {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_KEY);
+    if (raw == null) return;
+    collapseHasStored = true;
+    const list = JSON.parse(raw);
+    if (Array.isArray(list)) {
+      for (const path of list) if (typeof path === "string") collapsedProjects.add(path);
+    }
+  } catch {}
+}
+loadCollapsed();
+function persistCollapsed() {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsedProjects]));
+  } catch {}
+}
 
 function openSessionMenu(anchor, session) {
   const items = [
@@ -18,6 +42,15 @@ function openSessionMenu(anchor, session) {
       label: session.pinned ? "Unpin" : "Pin",
       icon: "pin",
       action: () => emit("session:pin", { id: session.id, pinned: !session.pinned }),
+    },
+    {
+      // Opens the inline row editor; main.js owns the PATCH behind the
+      // session:rename intent the commit emits.
+      label: "Rename",
+      action: () => {
+        const li = anchor.closest?.("li.sess");
+        if (li) startInlineRename(li, session);
+      },
     },
   ];
   if (session.type !== "shell") {
@@ -28,7 +61,7 @@ function openSessionMenu(anchor, session) {
     });
   }
   items.push({
-    label: "Kill",
+    label: "Kill session...",
     icon: "x",
     danger: true,
     action: () => emit("session:kill", session.id),
@@ -73,15 +106,44 @@ function stableCreatedOrder(a, b) {
     || String(a.id).localeCompare(String(b.id));
 }
 
-function includesQuery(value, query) {
-  return String(value || "").toLocaleLowerCase().includes(query);
+// Sidebar search: free terms fuzzy-match through the palette's subsequence
+// scorer — one matcher for the whole app — plus explicit filters
+// status:working|waiting|idle|done, is:pinned, type:agent|shell (agent is
+// anything but a shell). Every term must hit some field.
+function parseSearch(query) {
+  const filters = { status: [], pinnedOnly: false, type: null, terms: [] };
+  for (const token of String(query || "").trim().split(/\s+/).filter(Boolean)) {
+    const colon = token.indexOf(":");
+    if (colon > 0) {
+      const key = token.slice(0, colon).toLowerCase();
+      const value = token.slice(colon + 1).toLowerCase();
+      if (key === "status" && ["working", "waiting", "idle", "done"].includes(value)) {
+        filters.status.push(value);
+        continue;
+      }
+      if (key === "is" && value === "pinned") {
+        filters.pinnedOnly = true;
+        continue;
+      }
+      if (key === "type" && (value === "agent" || value === "shell")) {
+        filters.type = value;
+        continue;
+      }
+    }
+    filters.terms.push(token);
+  }
+  return filters;
 }
-function sessionMatches(session, query) {
-
-  return includesQuery(session.title, query)
-    || includesQuery(session.folder, query)
-    || includesQuery(session.profile, query)
-    || includesQuery(session.type, query);
+function fieldMatches(field, term) {
+  return score(String(field || ""), term) !== null;
+}
+function sessionMatches(session, filters) {
+  if (filters.status.length && !filters.status.includes(sessionStatus(session))) return false;
+  if (filters.pinnedOnly && !session.pinned) return false;
+  if (filters.type === "shell" && session.type !== "shell") return false;
+  if (filters.type === "agent" && session.type === "shell") return false;
+  const fields = [session.title, session.folder, session.profile, session.type, session.id];
+  return filters.terms.every((term) => fields.some((field) => fieldMatches(field, term)));
 }
 
 function buildFolders(sessions, ghosts = []) {
@@ -123,16 +185,29 @@ function currentFolder(sessions) {
 
 function syncDefaultCollapse(folders, sessions) {
   const current = currentFolder(sessions);
-  for (const folder of folders) {
-    if (knownProjects.has(folder.path)) continue;
-    knownProjects.add(folder.path);
-    if (folder.path !== current) collapsedProjects.add(folder.path);
-  }
   // Selecting a session used to force its folder open. Now that folders list
   // every session, that meant clicking anything in Pinned or Recent blew the
   // whole containing folder open underneath it. The folder is marked instead,
   // and stays exactly as the user left it.
   activeProject = current;
+  let derived = false;
+  for (const folder of folders) {
+    if (knownProjects.has(folder.path)) continue;
+    knownProjects.add(folder.path);
+    // Stored state wins: anything decided in a previous run stays as left.
+    if (collapseHasStored || collapsedProjects.has(folder.path)) continue;
+    // First-run default only: a folder with nothing waiting, working, or
+    // unread — and not holding the open session — starts collapsed, so a
+    // restart restores the project grouping instead of a chronological soup.
+    derived = true;
+    const signal = folder.path === current
+      || folder.sessions.some((session) =>
+        sessionStatus(session) === "waiting"
+        || sessionStatus(session) === "working"
+        || sessionPeeksUnread(session));
+    if (!signal) collapsedProjects.add(folder.path);
+  }
+  if (derived) persistCollapsed();
 }
 
 function folderMenuButton(folder) {
@@ -149,29 +224,46 @@ function folderMenuButton(folder) {
 
 function folderHeading(folder, expanded) {
   const holdsCurrent = folder.path === activeProject;
+  const selected = folder.path === state.selectedFolder;
   const heading = elem("div", {
     class: "folder-head"
-      + (folder.path === state.selectedFolder ? " active" : "")
+      + (selected ? " active" : "")
       + (holdsCurrent ? " holds-current" : ""),
   });
+  // Split hit areas: the chevron toggles collapse only, the name selects the
+  // folder (the new-session target) only. One button doing both retargeted
+  // new sessions every time a folder was expanded. Both keep .folder-toggle
+  // so the existing row geometry still applies.
   const toggle = elem("button", {
-    class: "folder-toggle",
+    class: "folder-toggle folder-collapse",
     type: "button",
     "aria-expanded": String(expanded),
-    "aria-pressed": String(folder.path === state.selectedFolder),
-    title: folder.path,
+    "aria-label": `${expanded ? "Collapse" : "Expand"} ${folder.name}`,
+    title: `${expanded ? "Collapse" : "Expand"} ${folder.name}`,
     onclick: () => {
-      state.selectedFolder = folder.path;
       if (collapsedProjects.has(folder.path)) collapsedProjects.delete(folder.path);
       else collapsedProjects.add(folder.path);
+      persistCollapsed();
       emit("sidebar:rerender");
     },
   },
     elem("span", { class: "folder-chevron", text: "›", "aria-hidden": "true" }),
+  );
+  const select = elem("button", {
+    class: "folder-toggle folder-select",
+    type: "button",
+    "aria-pressed": String(selected),
+    "aria-label": folder.name,
+    title: folder.path,
+    onclick: () => {
+      state.selectedFolder = folder.path;
+      emit("sidebar:rerender");
+    },
+  },
     elem("span", { class: "folder-name", text: folder.name }),
     elem("span", { class: "folder-count", text: String(folder.count ?? folder.sessions.length) }),
   );
-  heading.append(toggle, folderMenuButton(folder));
+  heading.append(toggle, select, folderMenuButton(folder));
   return heading;
 }
 
@@ -236,13 +328,24 @@ function sessionSection(label, className, sessions, onOpen) {
 
 export function renderSearch(host, sessions, { onOpen, query, ghosts = [] } = {}) {
   menu.close({ restoreFocus: false });
-  const search = query.trim().toLocaleLowerCase();
-  const matches = sessions.filter((session) => sessionMatches(session, search)).sort(stableCreatedOrder);
-  const ghostMatches = ghosts
-    .filter((ghost) => sessionMatches({ ...ghost, type: ghost.type }, search))
-    .sort(stableCreatedOrder);
+  const filters = parseSearch(query);
+  const matches = sessions.filter((session) => sessionMatches(session, filters)).sort(stableCreatedOrder);
+  const ghostMatches = ghosts.filter((ghost) => sessionMatches(ghost, filters)).sort(stableCreatedOrder);
+  // Folders match too, so searching for a project to start in finds it even
+  // when nothing is running there.
+  // Name only: every path shares the workspace prefix, so matching on it made
+  // "workspace" return all of them. Pure-filter queries list no folders: the
+  // filters describe sessions, not projects.
+  const folderMatches = filters.terms.length
+    ? buildFolders(sessions).filter((folder) => filters.terms.every((term) => fieldMatches(folder.name, term)))
+    : [];
 
   host.replaceChildren();
+  const parts = [];
+  if (matches.length) parts.push(`${matches.length} session${matches.length === 1 ? "" : "s"}`);
+  if (ghostMatches.length) parts.push(`${ghostMatches.length} not running`);
+  if (folderMatches.length) parts.push(`${folderMatches.length} folder${folderMatches.length === 1 ? "" : "s"}`);
+  if (parts.length) host.append(elem("li", { class: "search-count", text: parts.join(" · ") }));
   for (const session of matches) {
     host.append(sessionRow(session, { onOpen, menu: openSessionMenu }));
   }
@@ -254,13 +357,8 @@ export function renderSearch(host, sessions, { onOpen, query, ghosts = [] } = {}
     section.append(list);
     host.append(section);
   }
-  // Folders match too, so searching for a project to start in finds it even
-  // when nothing is running there.
-  // Name only: every path shares the workspace prefix, so matching on it made
-  // "workspace" return all of them.
-  const folderMatches = buildFolders(sessions).filter((folder) => includesQuery(folder.name, search));
   for (const folder of folderMatches) host.append(emptyFolderRow(folder));
-  if (!matches.length && !ghostMatches.length && !folderMatches.length) {
+  if (!parts.length) {
     host.append(elem("li", {
       class: "empty search-empty",
       text: `No sessions or folders match “${query.trim()}”`,
@@ -325,7 +423,7 @@ export function render(host, sessions, { onOpen, ghosts = [] } = {}) {
         "aria-label": `${folder.name} sessions`,
       });
       for (const session of rows) {
-        list.append(sessionRow(session, { onOpen, menu: openSessionMenu }));
+        list.append(sessionRow(session, { onOpen, menu: openSessionMenu, pinnedMarker: true }));
       }
       for (const ghost of dead) list.append(ghostRow(ghost));
       group.append(list);
