@@ -54,8 +54,11 @@ under `public/` are served on the next request; changes to `server.js`, `api/`,
 - Backend errors carry `e.code` (`ENOSESSION`, `EEXIST`, `ENOTFOUND`, ...);
   `api/util.js` maps code to HTTP status in one place. Add new codes there,
   never a second mapping.
-- Projects-view rows sort by the stable `created` key. tmux `session_activity`
-  changes on every attach and would reshuffle rows under the cursor.
+- Sidebar folder and status rows sort by the stable `created` key. tmux
+  `session_activity` changes on every attach and would reshuffle rows under the
+  cursor. The Recent section is the one activity-ordered list: it duplicates
+  rows (they stay in their folders) and freezes its order while the sidebar is
+  hovered or focused, repainting only once released.
 - Every shipped frontend change bumps the `?v=` query for that file in
   `public/index.html`, or browsers keep the stale asset.
 - Comments explain why (invariants, tmux quirks, iOS workarounds), never what.
