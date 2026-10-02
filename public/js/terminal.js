@@ -4,7 +4,8 @@
 // This module owns byte/scroll protocol per entry; pool owns lifecycle/hosts.
 
 import { state, emit, setCurrent } from "./state.js";
-import { el } from "./dom.js";
+import { el, elem } from "./dom.js";
+import { workspaceRelative } from "./paths.js";
 import { api } from "./api.js";
 import { showNotice } from "./notice.js";
 import { sessionStatus, statusLabel, statusTitle } from "./session-status.js";
@@ -744,13 +745,35 @@ function sessionRuntimeLabel(session) {
   return session.type === "shell" ? "shell" : (session.profile || "default");
 }
 
+// Breadcrumb: where the session runs, then what it is. The runtime tag is
+// for Terminal; Chat's composer names the model, so CSS hides it there.
+function paintTitle(session) {
+  const node = el["term-title"];
+  const folder = workspaceRelative(session.folder);
+  const title = session.title || session.id;
+  const runtime = sessionRuntimeLabel(session);
+  const tip = `${folder ? `${session.folder} / ` : ""}${title} · ${runtime}`;
+  // The metadata poll repaints every 2s; the tooltip encodes every input, and
+  // plain-text writers (ghost preview, no session) drop the .term-name child.
+  if (node.title === tip && node.querySelector(".term-name")) return;
+  node.replaceChildren(
+    ...(folder ? [
+      elem("span", { class: "term-crumb", text: folder }),
+      elem("span", { class: "term-crumb-sep", text: "/", "aria-hidden": "true" }),
+    ] : []),
+    elem("span", { class: "term-name", text: title }),
+    elem("span", { class: "term-runtime", text: runtime }),
+  );
+  node.title = tip;
+}
+
 export function syncSessionMetadata(sessions) {
   // A ghost preview owns the header ("not running"); the 2 s poll must not
   // repaint it with the parked session until the preview closes.
   if (!state.current || state.selectedGhost) return;
   const session = sessions.find((item) => item.id === state.current);
   if (session) {
-    el["term-title"].textContent = `${session.title}  ·  ${sessionRuntimeLabel(session)}`;
+    paintTitle(session);
     el["profile-btn"].hidden = session.type === "shell";
     paintHeaderStatus(session);
   }
@@ -961,7 +984,7 @@ export function attach(session, { reset = true } = {}) {
   el.main.classList.add("has-session");
   pool.syncEmptyView();
   ensureTermFor(entry);
-  el["term-title"].textContent = `${session.title}  ·  ${sessionRuntimeLabel(session)}`;
+  paintTitle(session);
   el["kill-btn"].hidden = false;
   el["profile-btn"].hidden = session.type === "shell";
   el.quickkeys.hidden = false;
@@ -1055,9 +1078,8 @@ function reactivateEntry(id = state.current) {
       if (entry.host) entry.host.style.visibility = "hidden";
       if (el["replay-loader"]) el["replay-loader"].hidden = false;
     }
-    el["term-title"].textContent = session
-      ? `${session.title}  ·  ${sessionRuntimeLabel(session)}`
-      : entry.id;
+    if (session) paintTitle(session);
+    else { el["term-title"].textContent = entry.id; el["term-title"].title = ""; }
     el["kill-btn"].hidden = false;
     el["profile-btn"].hidden = session ? session.type === "shell" : true;
     if (el.quickkeys) el.quickkeys.hidden = false;
@@ -1070,6 +1092,7 @@ function showEmptyChrome() {
   setCurrent(null);
   el.main.classList.remove("has-session");
   el["term-title"].textContent = "no session";
+  el["term-title"].title = "";
   el["kill-btn"].hidden = true;
   el["profile-btn"].hidden = true;
   if (el.quickkeys) el.quickkeys.hidden = true;

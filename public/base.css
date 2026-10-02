@@ -42,8 +42,9 @@
   --reading-width: 760px;
   /* The transcript is the only long-form reading surface, but it still has to
      belong to the same type scale as the sidebar (12.5) and header (13.5);
-     14.5 made chat look like a different application. */
-  --chat-text: 13.5px;
+     14.5 made chat look like a different application. 14 plus looser leading
+     and turn spacing reads calmer without leaving the scale. */
+  --chat-text: 14px;
   --term-bg: #101214;
   /* Codex-style neutral bubble: the blue tint made every user turn shout. */
   --bubble-user: #20252b;

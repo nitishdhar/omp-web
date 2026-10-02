@@ -12,7 +12,7 @@
 .chat-body { position: relative; display: flex; flex: 1; min-height: 0; overflow: hidden; }
 .chat-log-wrap { position: relative; display: flex; justify-content: center; flex: 1; min-width: 0; min-height: 0; }
 #chat-log {
-  display: flex; flex: 1; flex-direction: column; gap: 20px; width: 100%; min-width: 0;
+  display: flex; flex: 1; flex-direction: column; gap: 26px; width: 100%; min-width: 0;
   padding: 28px clamp(20px, 4vw, 48px) 16px; overflow-x: hidden; overflow-y: auto;
   overscroll-behavior: contain; scrollbar-gutter: stable;
   /* transcript.js owns tail pinning; browser scroll anchoring fought it and
@@ -89,8 +89,8 @@
 /* Conversation first: the user turn is a quiet aside, not a card — a softer
    fill and edge with rounder corners so assistant prose stays primary. */
 .chat-bubble {
-  max-width: 100%; padding: 8px 12px; white-space: pre-wrap;
-  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 16px;
+  max-width: 100%; padding: 9px 14px; white-space: pre-wrap;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent); border-radius: 18px;
   background: color-mix(in srgb, var(--bubble-user) 82%, transparent); font-size: var(--chat-text); line-height: 1.6;
 }
 .chat-user-text.is-collapsed {
@@ -152,10 +152,10 @@
 /* No left rail on assistant turns: it reads as a blockquote and nests
    confusingly with real .chat-blockquote rails inside the same reply. */
 .chat-assistant { padding-left: 0; }
-.chat-assistant-body { font-size: var(--chat-text); line-height: 1.65; letter-spacing: 0; }
-.chat-para { margin: 0 0 11px; }
+.chat-assistant-body { font-size: var(--chat-text); line-height: 1.7; letter-spacing: 0; }
+.chat-para { margin: 0 0 13px; }
 .chat-para:last-child, .chat-list:last-child { margin-bottom: 0; }
-.chat-list { margin: 0 0 11px; padding-left: 22px; }
+.chat-list { margin: 0 0 13px; padding-left: 22px; }
 .chat-list li { margin: 4px 0; padding-left: 2px; }
 /* Depth reads from the marker, not from indentation alone — at this measure a
    nested list is only a few px in, and identical discs collapse the levels. */
@@ -461,7 +461,7 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 #chat-send { border-radius: 50%; }
 /* Agent identity opens each run of assistant turns; consecutive assistant
    items in the same run drop it so the prose stays primary. */
-.chat-agent-label { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.chat-agent-label { display: flex; align-items: center; gap: 6px; margin-bottom: 7px; color: var(--muted); font-size: 11.5px; font-weight: 600; }
 .chat-agent-mark { color: var(--accent); font-size: 9px; line-height: 1; }
 .chat-item.chat-assistant + .chat-item.chat-assistant .chat-agent-label { display: none; }
 #chat-input { flex: 1; min-width: 0; min-height: 38px; max-height: 196px; padding: 8px 7px; overflow-y: hidden; resize: none; border: 0; border-radius: 8px; outline: 0; background: transparent; color: var(--text); font: var(--chat-text)/1.6 var(--font-ui); }
@@ -537,7 +537,6 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 .ca-sep, .cs-sep { flex: none; color: var(--line-strong); }
 #chat-status { display: flex; align-items: center; justify-content: flex-start; flex: 1; min-width: 0; gap: 5px; min-height: 20px; padding: 0; overflow: hidden; color: var(--faint); font: 11px var(--font-ui); }
 .cs-model, .cs-effort { flex: none; color: var(--muted); font-weight: 600; white-space: nowrap; }
-.cs-provider { min-width: 0; overflow: hidden; color: var(--faint); text-overflow: ellipsis; white-space: nowrap; }
 .cs-cwd { flex: 0 1 180px; min-width: 0; max-width: 180px; overflow: hidden; color: var(--faint); text-overflow: ellipsis; white-space: nowrap; }
 .cs-git { display: flex; align-items: center; flex: none; min-width: 0; gap: 5px; color: var(--muted); white-space: nowrap; }
 .cs-git-branch { flex: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
@@ -614,10 +613,10 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 .cs-item + .cs-item::before {
   content: "\00b7"; margin: 0 7px; color: var(--line-strong);
 }
-/* Below the reading measure the rail keeps the model name; provider, cwd
-   and effort drop out here. */
+/* Below the reading measure the rail keeps the model name; cwd and effort
+   drop out here. */
 @media (max-width: 720px) {
-  .cs-provider, .cs-cwd, .cs-effort { display: none; }
+  .cs-cwd, .cs-effort { display: none; }
   /* Horizontal scroll inside a vertical transcript is unfindable on touch;
      wrapping cells keeps the whole table on screen. */
   .chat-table { width: 100%; }

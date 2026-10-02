@@ -14,7 +14,7 @@ TOKENS = """
   --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
   --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
   --pop-shadow:0 8px 24px rgba(0,0,0,.36);
-  --reading-width:760px; --chat-text:13.5px; --term-bg:#101214; --bubble-user:#20252b;
+  --reading-width:760px; --chat-text:14px; --term-bg:#101214; --bubble-user:#20252b;
   --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
 }
 *{box-sizing:border-box}
@@ -161,7 +161,7 @@ body = f"""
       request. <code>cv05</code> is enabled to give <code>l</code> a tail:
       l/1/I have to separate at 11px in an app full of paths and flags.
       These preview cards use the same UI and monospace stacks as the shipped app.
-      Transcript type is <code>--chat-text: 13.5px</code>, shared by assistant
+      Transcript type is <code>--chat-text: 14px</code>, shared by assistant
       prose, user bubbles and the composer so chat stays on the app type scale.</p>
   </section>
   <section class="ds-block">
@@ -432,6 +432,7 @@ sidebar_html = f"""<div class="frame">
         {row("Proxy Setup", "status-shell", "", "omp-web &middot; ollama &middot; 5h ago")}</ul></li>
     <li><button class="folder-toggle"><span class="folder-chevron closed">&rsaquo;</span><span class="folder-name">infra</span><span class="folder-count">7</span></button></li>
     {row("Onboard Metabase", "status-unknown", "", "infra &middot; claude &middot; yesterday", recede=True)}
+    <li><button class="folder-toggle"><span class="folder-chevron closed">&rsaquo;</span><span class="folder-name" style="color:var(--faint)">Other folders</span><span class="folder-count">(31)</span></button></li>
   </ul>
   <footer class="side-foot"><span class="side-foot-copy">14 sessions &middot; 7799</span><button class="settings-btn" aria-label="Settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.88 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.88.34H9.1A1.7 1.7 0 0 0 10.13 3V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9.1a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.5Z"/></svg></button></footer>
 </div>"""
@@ -479,7 +480,10 @@ HEADER_CSS = """
 .badge.working{background:var(--ok);box-shadow:0 0 0 2px color-mix(in srgb,var(--ok) 16%,transparent);
   animation:pulse 1s ease-in-out infinite}
 .badge.dead{background:var(--faint);box-shadow:0 0 0 2px var(--danger)}
-.term-title{overflow:hidden;font-size:13.5px;font-weight:550;letter-spacing:-.005em}
+.term-title{display:flex;align-items:baseline;gap:6px;min-width:0;overflow:hidden;font-size:13.5px;font-weight:550;letter-spacing:-.005em;white-space:nowrap}
+.term-crumb{color:var(--muted);font-weight:450}
+.term-crumb-sep{color:var(--faint);font-weight:400}
+.term-runtime{align-self:center;padding:1px 7px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font:500 11px var(--font-ui)}
 .spacer{flex:1}
 .icon-action{display:inline-grid;place-items:center;flex:none;width:38px;min-height:38px;padding:0;
   border:0;border-radius:6px;background:transparent;color:var(--text)}
@@ -526,7 +530,7 @@ ICON_USAGE = '<svg viewBox="0 0 24 24"><path d="M3 19h4v-5H3zm7 0h4V9h-4zm7 0h4V
 
 head = f"""<header class="term-head">
   <div class="term-session"><span class="badge working"></span>
-    <span class="term-title">Omp Web Main</span></div>
+    <span class="term-title"><span class="term-crumb">omp-web</span><span class="term-crumb-sep">/</span><span>Omp Web Main</span><span class="term-runtime">claude</span></span></div>
   <span class="spacer"></span>
   <button class="icon-action" title="Switch to chat mode">{ICON_CHAT}</button>
   <button class="icon-action muted">{ICON_USAGE}</button>
@@ -752,8 +756,15 @@ body = f"""
     <div class="log"><div class="chat-placeholder">
       <span class="chat-placeholder-kicker">Conversation</span>
       <h1>Ready when you are</h1>
-      <p>Choose a session, then send a message below to begin.</p>
+      <p>Type below to start a new session, or pick up an existing one.</p>
     </div></div>
+    <div class="log"><div class="chat-placeholder">
+      <span class="chat-placeholder-kicker">Conversation</span>
+      <h1>No messages yet</h1>
+      <p>Send the first message to Omp Web Main.</p>
+    </div></div>
+    <p class="ds-note">No session selected gets the landing copy. A selected session with no
+      messages names itself; it never offers to start a new one.</p>
   </section>
 """
 page("components/chat-transcript.html", "Chat", "Transcript", "Chat mode",

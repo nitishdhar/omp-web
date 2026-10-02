@@ -141,33 +141,38 @@ function renderStatus(derived) {
   refreshGitStatus();
   const git = gitStatus;
   const { model, provider, profile, cwd, context, effort, spend } = derived;
+  // Before the first reply the transcript carries no model or profile; the
+  // session list does, and the header's runtime tag is hidden in Chat.
+  const session = (state.sessions || []).find((item) => item.id === state.current);
+  const runProfile = profile || (session && session.type !== "shell" ? session.profile : null);
   if (!changed("status", [
-    model, derived.modelSource, provider, profile, cwd, context?.percent, context?.totalTokens, effort, spend, gitSessionId, git,
+    model, derived.modelSource, provider, runProfile, cwd, session?.folder, context?.percent, context?.totalTokens, effort, spend, gitSessionId, git,
   ])) return;
   clr(node);
   // Separators are drawn by CSS between siblings rather than pushed as their
   // own spans, so dropping a field on a narrow viewport cannot orphan a dot.
   const parts = [];
-  const runtime = model || (profile ? `${profile} profile` : null);
+  const runtime = model || (runProfile ? `${runProfile} profile` : null);
   // The model chip is the fastest path to "run this under something else":
   // it opens the existing profile/model reload dialog for the live session.
   // A launch-sourced model is what omp-web started the runtime with; the
   // transcript confirms it when the first reply lands.
   const pending = derived.modelSource === "launch";
+  // Provider rides in the tooltip: the model name already implies it, and the
+  // run controls read better as a few labelled chips than a row of facts.
+  const via = provider ? ` (${provider})` : "";
   if (runtime) parts.push(elem("button", {
     class: "cs-item cs-model cs-model-action" + (pending ? " cs-model-pending" : ""),
     type: "button",
     title: pending
-      ? "Launch model — confirmed after the first reply. Click to reload under another profile or model"
-      : "Reload this session under another profile or model",
+      ? `Launch model${via} — confirmed after the first reply. Click to reload under another profile or model`
+      : `${runtime}${via}. Reload this session under another profile or model`,
     onclick: () => emit("session:reloadRequest", state.current),
   }, runtime));
   if (effort) parts.push(elem("span", { class: "cs-item cs-effort" }, `${effort} effort`));
-  if (provider) parts.push(elem("span", { class: "cs-item cs-provider" }, provider));
-  // The absolute path truncated mid-word and spent its width on the prefix
-  // every row shares, so the rail shows the workspace-relative part with the
-  // real path in the tooltip.
-  if (cwd) {
+  // The header breadcrumb names the session's folder; the working directory
+  // shows here only when the agent has moved somewhere else.
+  if (cwd && cwd !== session?.folder) {
     parts.push(elem("span", { class: "cs-item cs-cwd", title: cwd }, workspaceRelative(cwd)));
   }
   // Git reads as one coupled unit — branch icon, branch, dirty count tight
@@ -604,7 +609,25 @@ function renderEmpty() {
   if (changed("empty", empty)) { if (empty) show(node); else hide(node); }
   // Outside the guard: the landing screen is shown before the session list has
   // loaded, so its offers arrive on a later refresh than the placeholder does.
-  if (empty) { renderResume(); renderLandingTarget(); }
+  if (empty) { renderEmptyCopy(); renderResume(); renderLandingTarget(); }
+}
+
+// Inside a session the landing copy ("start a new session, or pick up an
+// existing one") described the wrong screen: the session already exists.
+function renderEmptyCopy() {
+  const session = state.current
+    ? (state.sessions || []).find((item) => item.id === state.current)
+    : null;
+  const name = session ? (session.title || session.id) : null;
+  if (!changed("emptyCopy", name)) return;
+  if (el["chat-empty-title"]) {
+    el["chat-empty-title"].textContent = name ? "No messages yet" : "Ready when you are";
+  }
+  if (el["chat-empty-text"]) {
+    el["chat-empty-text"].textContent = name
+      ? `Send the first message to ${name}.`
+      : "Type below to start a new session, or pick up an existing one.";
+  }
 }
 
 // The composer creates a session without a dialog, so where it lands has to be
@@ -638,7 +661,9 @@ export function refreshLanding() { renderEmpty(); }
 function renderResume() {
   const node = el["chat-empty-resume"];
   if (!node) return;
-  const recent = (state.sessions || [])
+  // Other sessions are a landing-screen offer; inside a session they compete
+  // with the one you just opened.
+  const recent = state.current ? [] : (state.sessions || [])
     .filter((session) => session.type !== "shell")
     .slice()
     .sort((a, b) => (b.lastActivity || 0) - (a.lastActivity || 0))

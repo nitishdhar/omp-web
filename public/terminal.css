@@ -5,7 +5,15 @@
   min-height: 56px; padding: 8px 14px; border-bottom: 1px solid var(--line); background: var(--panel);
 }
 .term-session { display: flex; align-items: center; gap: 9px; min-width: 0; }
-#term-title { overflow: hidden; font-size: 13.5px; font-weight: 550; letter-spacing: -.005em; text-overflow: ellipsis; white-space: nowrap; }
+/* Breadcrumb: folder / title, then the runtime tag. Folder yields width
+   first so the title stays readable; the full path is in the tooltip. */
+#term-title { display: flex; align-items: baseline; gap: 6px; min-width: 0; overflow: hidden; font-size: 13.5px; font-weight: 550; letter-spacing: -.005em; white-space: nowrap; }
+.term-crumb { flex: 0 10 auto; min-width: 0; max-width: 45%; overflow: hidden; color: var(--muted); font-weight: 450; text-overflow: ellipsis; }
+.term-crumb-sep { flex: none; color: var(--faint); font-weight: 400; }
+.term-name { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.term-runtime { flex: none; align-self: center; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font: 500 11px var(--font-ui); }
+/* Chat's composer already names the model; the tag would say it twice. */
+#main.chat-active .term-runtime { display: none; }
 .badge { flex: none; width: 8px; height: 8px; overflow: hidden; border-radius: 50%; background: var(--faint); color: transparent; }
 .badge.connection-dead { box-shadow: 0 0 0 2px var(--danger); }
 /* Mode host: the content region below .term-head. Stacks #term-wrap and the
@@ -373,6 +381,8 @@
   .term-head > button { min-height: 44px; }
   .term-session { flex: 1; min-width: 0; }
   #term-title { font-size: 14px; }
+  /* Narrow headers keep the title; the folder lives in the tooltip. */
+  .term-crumb, .term-crumb-sep { display: none; }
   .session-actions-toggle { width: 44px; min-width: 44px; padding: 0; }
   .quickkeys {
     display: flex; gap: 6px; padding: 8px; overflow-x: auto;
