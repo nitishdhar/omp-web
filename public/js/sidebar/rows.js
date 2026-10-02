@@ -57,6 +57,18 @@ export function sessionHasUnread(session) {
     return size > seen;
   } catch { return false; }
 }
+// Side-effect-free unread peek for collapse defaults. sessionHasUnread records
+// a baseline on first sighting, so calling it outside row paint would mark
+// every session seen and swallow the badge before first paint.
+export function sessionPeeksUnread(session) {
+  if (!session || session.type === "shell" || session.id === state.current) return false;
+  const size = Number(session.transcriptSize);
+  if (!size) return false;
+  try {
+    const seen = Number(sessionStorage.getItem(seenKey(session.id)) || 0);
+    return seen !== 0 && size > seen;
+  } catch { return false; }
+}
 
 function sessionDetails(session) {
   const status = sessionStatus(session);
@@ -93,10 +105,15 @@ function buildSessionRow(session, { onOpen, menu, showFolder = false, narrow = f
     class: "sess-open",
     type: "button",
     title: details,
-    "aria-label": details ? `${session.title}, ${details}` : session.title,
+    "aria-label": details ? `${session.title}, ${details}${unread ? ", unread" : ""}` : session.title,
     "data-session-id": session.id,
     "aria-current": session.id === state.current ? "page" : null,
-    onclick: () => onOpen && onOpen(session),
+    onclick: () => {
+      // Inline rename swaps the title for an input inside this button; clicks
+      // landing on the input must edit, never open the session.
+      if (li.classList.contains("renaming")) return;
+      if (onOpen) onOpen(session);
+    },
   });
   const lines = elem("span", { class: "sess-lines" });
   const row = elem("span", { class: "row1" });
@@ -111,7 +128,7 @@ function buildSessionRow(session, { onOpen, menu, showFolder = false, narrow = f
   if (status === "waiting") {
     row.append(elem("span", {
       class: "needs-you",
-      text: "needs input",
+      text: "Needs you",
       title: "This session is blocked on an answer or approval",
     }));
   }
@@ -136,7 +153,7 @@ function buildSessionRow(session, { onOpen, menu, showFolder = false, narrow = f
   // Shell sessions have no profile; Recent rows repeat the folder here only on
   // wide layouts where the second line has room.
   if (!narrow) {
-    const statusText = status === "waiting" ? "Waiting" : "";
+    const statusText = status === "waiting" ? "Needs you" : "";
     const sub = [
       folderName(session.folder),
       session.type === "shell" ? "shell" : (session.profile || "default"),
@@ -174,6 +191,102 @@ function buildSessionRow(session, { onOpen, menu, showFolder = false, narrow = f
     }, icon("dots", 14)));
   }
   return li;
+}
+// Inline rename: swaps the row's title for an input in place. Enter commits,
+// Esc cancels, blur commits only when the text changed; an empty commit
+// reverts (the backend rejects empty titles). Commit emits session:rename —
+// main.js owns the PATCH — and the static title is restored underneath, so a
+// failed rename still leaves a row. Ghost rows never rename.
+// The input lives inside a rendered row, so index.js holds sidebar renders
+// while one is open (renameActive) and replays the latest when it closes
+// (onRenameEnd).
+let renamingRow = null;
+let renamingFinish = null;
+let renamingDone = false;
+let renameEndHook = null;
+// Set while one rename hands over to another: replaying the held render then
+// would rebuild the list and detach the row about to be edited.
+let renameSwitching = false;
+export function onRenameEnd(fn) {
+  renameEndHook = fn;
+}
+export function renameActive() {
+  // Safari drops a removed focused input without a blur, which would leave
+  // renders held forever; a detached row is no longer an open rename.
+  if (renamingRow && !renamingRow.isConnected) renamingRow = null;
+  return Boolean(renamingRow);
+}
+function finishInlineRename(li, titleEl, input, session, original, cancel) {
+  if (renamingRow !== li || renamingDone) return;
+  renamingDone = true;
+  renamingRow = null;
+  renamingFinish = null;
+  li.classList.remove("renaming");
+  const value = input.value.trim();
+  input.replaceWith(titleEl);
+  if (!cancel && value && value !== original) {
+    emit("session:rename", { id: session.id, title: value });
+  }
+  const open = li.querySelector(".sess-open");
+  if (open && open.isConnected) open.focus();
+  if (renameEndHook && !renameSwitching) renameEndHook();
+}
+export function startInlineRename(li, session) {
+  if (!li || !session || li.classList.contains("ghost")) return;
+  if (renamingRow === li) return;
+  const titleEl = li.querySelector(".sess-open .title");
+  if (!titleEl || li.querySelector(".rename-input")) return;
+  if (renamingRow) {
+    // Commit the open edit directly: its blur decision is deferred and would
+    // land after this row has taken over.
+    renameSwitching = true;
+    if (renamingFinish) renamingFinish(false);
+    else { renamingRow.classList.remove("renaming"); renamingRow = null; }
+    renameSwitching = false;
+  }
+  // The overflow menu stays open over the input otherwise; skip focus return
+  // since focus moves straight into the input.
+  menu.close({ restoreFocus: false });
+  const original = session.title || "";
+  renamingRow = li;
+  renamingDone = false;
+  li.classList.add("renaming");
+  const finish = (cancel) => finishInlineRename(li, titleEl, input, session, original, cancel);
+  renamingFinish = finish;
+  const input = elem("input", {
+    class: "rename-input",
+    type: "text",
+    value: original,
+    maxlength: "120",
+    "aria-label": `Rename ${original}`,
+    // The input lives inside the row's open button: clicks must not bubble up
+    // to it, and every key belongs to the edit (rail arrows move caret here).
+    onclick: (event) => event.stopPropagation(),
+    onkeydown: (event) => {
+      event.stopPropagation();
+      if (event.key === "Enter") {
+        event.preventDefault();
+        finish(false);
+      } else if (event.key === "Escape") {
+        event.preventDefault();
+        finish(true);
+      }
+    },
+    // Chrome fires blur while a focused input is being removed, still
+    // attached; decide a microtask later, once removal has settled.
+    onblur: () => queueMicrotask(() => {
+      // A detached input is the row going away, not the user leaving the
+      // field: half-typed text must not commit.
+      if (!input.isConnected) return finish(true);
+      // Switching windows blurs without moving focus; the edit resumes on
+      // return instead of committing whatever was typed so far.
+      if (document.activeElement === input) return;
+      finish(false);
+    }),
+  });
+  titleEl.replaceWith(input);
+  input.focus();
+  input.select();
 }
 
 // Exactly what a row paints, and nothing else. The poll render gate compares
@@ -223,7 +336,7 @@ export function ghostRow(ghost) {
   const lines = elem("span", { class: "sess-lines" });
   const row = elem("span", { class: "row1" });
   row.append(elem("span", {
-    class: "session-status-indicator dot status-unknown",
+    class: "session-status-indicator dot status-unknown ghost-dot",
     title: "Not running",
     "aria-hidden": "true",
   }));
@@ -239,6 +352,23 @@ export function ghostRow(ghost) {
   }));
   open.append(lines);
   li.append(open);
+  // Small inline Restore next to the menu: the row itself still opens the
+  // ghost's detail preview, this button restores straight away.
+  li.append(elem("button", {
+    class: "ghost-restore",
+    type: "button",
+    "aria-label": `Restore ${ghost.title}`,
+    title: "Restore this session",
+    onclick: (event) => {
+      event.stopPropagation();
+      // Same target as the menu's Restore: a moved folder restores where it
+      // moved to, since the recorded one is gone.
+      emit("session:restore", {
+        ids: [ghost.id],
+        folder: ghost.folderMissing && ghost.relocatedFolder ? ghost.relocatedFolder : undefined,
+      });
+    },
+  }, "Restore"));
   li.append(elem("button", {
     class: "row-menu",
     type: "button",

@@ -42,6 +42,9 @@ function validateRecord(record) {
     // Title opt-out survives tmux-server death here; tmux @omp_* options do
     // not. Strict boolean so a stale truthy string can never sneak through.
     notitle: record.notitle === true,
+    // Manual renames lock the title against transcript auto-titling; same
+    // strict-boolean rule as notitle so truthy strings cannot sneak through.
+    titleLocked: record.titleLocked === true,
   };
 }
 

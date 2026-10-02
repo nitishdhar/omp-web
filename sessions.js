@@ -55,6 +55,7 @@ const SESSION_FORMAT = [
   "#{@omp_model}",
   "#{@omp_model_at}",
   "#{@omp_notitle}",
+  "#{@omp_title_lock}",
 ].join("\t");
 const SESSION_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const BOOTSTRAP_MARK = String(process.pid);
@@ -311,7 +312,7 @@ function sessionFromLine(line) {
   const [
     name, folder, profile, type, rawStatus, rawStatusAt, rawRuntimeActivity,
     paneCommand, title, created, attached, windows, sessionActivity, pinned, source,
-    rawThinking, rawThinkingAt, rawLaunchModel, rawLaunchedAt, rawNoTitle,
+    rawThinking, rawThinkingAt, rawLaunchModel, rawLaunchedAt, rawNoTitle, rawTitleLock,
   ] = line.split("\t");
   const id = name.slice(config.sessionPrefix.length);
   const sessionProfile = profile || "default";
@@ -324,11 +325,14 @@ function sessionFromLine(line) {
     sessionType, rawStatus, publishedStatusAt, paneCommand, transcript
   );
   const persistedTitle = transcript ? readTranscriptTitle(transcript) : "";
+  // Manual renames lock @omp_title against transcript auto-titling so a
+  // renamed session keeps its name across restarts and transcript updates.
+  const titleLocked = rawTitleLock === "1";
   const target = tmuxPane(id);
   if (transcript && transcript !== source) {
     tmux(["set-option", "-t", target, "@omp_transcript", transcript]).catch(() => {});
   }
-  if (persistedTitle && persistedTitle !== title) {
+  if (!titleLocked && persistedTitle && persistedTitle !== title) {
     tmux(["set-option", "-t", target, "@omp_title", persistedTitle]).catch(() => {});
   }
   const publishedAge = Date.now() - publishedStatusAt;
@@ -353,13 +357,14 @@ function sessionFromLine(line) {
     status,
     statusAt,
     runtimeActivity,
-    title: persistedTitle || title || name,
+    title: titleLocked ? (title || name) : (persistedTitle || title || name),
     created: Number(created) || 0,
     attached: Number(attached) || 0,
     windows: Number(windows) || 1,
     lastActivity: Number(sessionActivity) || 0,
     pinned: pinned === "1",
     notitle: rawNoTitle === "1",
+    titleLocked,
     // Size powers the unread indicator; the status cache already stats this
     // file, but not for shell sessions, so stat here and tolerate failure.
     transcriptSize: transcript ? transcriptSizeOf(transcript) : 0,
@@ -468,7 +473,10 @@ async function restorable() {
   for (const entry of Object.values(entries)) {
     if (liveIds.has(entry.id)) continue;
     const transcript = resolveTranscript(entry.id, entry.profile);
-    const title = (transcript && readTranscriptTitle(transcript)) || entry.title || entry.id;
+    // A manual rename outranks omp's transcript auto-title, here as in the
+    // live row, so a not-running row keeps the name the user gave it.
+    const title = (entry.titleLocked && entry.title)
+      || (transcript && readTranscriptTitle(transcript)) || entry.title || entry.id;
     const ownedMtime = fileMtime(newestOwnedJsonl(entry.id));
     const createdMs = Number(entry.created) || 0;
     ghosts.push({
@@ -558,6 +566,7 @@ async function restoreOne(id, folderOverride = null) {
       type: spec.type,
       resume: spec.type === "agent" ? true : undefined,
       noTitle: spec.notitle === true,
+      titleLocked: spec.titleLocked === true,
     });
     if (spec.title && spec.title !== id) {
       try {
@@ -583,6 +592,7 @@ async function restoreOne(id, folderOverride = null) {
       created: Number(session.created) || Date.now(),
       pinned: Boolean(session.pinned),
       notitle: spec.notitle === true,
+      titleLocked: spec.titleLocked === true,
     });
     return { id, ok: true, session };
   } catch (error) {
@@ -655,7 +665,7 @@ async function resolvePane(id) {
   }
   return pane;
 }
-async function create({ name, folder, profile, type = "agent", resume, noTitle } = {}) {
+async function create({ name, folder, profile, type = "agent", resume, noTitle, titleLocked = false } = {}) {
   await bootstrap();
   const id = slug(name);
   if (await exists(id)) {
@@ -695,6 +705,11 @@ async function create({ name, folder, profile, type = "agent", resume, noTitle }
   if (noTitle && sessionType === "agent") {
     requireResult(await tmux(["set-option", "-t", target, "@omp_notitle", "1"]));
   }
+  // A restored rename carries its lock forward so the title survives the
+  // next transcript sync; tmux stays the source of truth for the live set.
+  if (titleLocked === true) {
+    requireResult(await tmux(["set-option", "-t", target, "@omp_title_lock", "1"]));
+  }
   requireResult(await tmux(["set-option", "-t", target, "status", "off"]));
   const record = {
     id,
@@ -705,6 +720,7 @@ async function create({ name, folder, profile, type = "agent", resume, noTitle }
     created: createdAt,
     pinned: false,
     notitle: noTitle === true,
+    titleLocked: titleLocked === true,
   };
 
   // tmux's configured default command is already `exec $SHELL -l`. Shell
@@ -755,6 +771,45 @@ async function setPinned(id, pinned) {
   } catch (error) {
     console.error(`registry pin update failed (${id}): ${error.message}`);
   }
+  return get(id);
+}
+// Manual rename: trims, locks the display title against transcript
+// auto-titling, and opts out of future auto-titles. The tmux session name
+// (slug/id) never changes, only @omp_title; the lock survives restarts via
+// the registry and skips the transcript->@omp_title sync in sessionFromLine.
+async function renameTitle(id, title) {
+  await bootstrap();
+  if (typeof id !== "string" || !SESSION_ID.test(id)) {
+    throw sessionError("EBADID", "invalid session id");
+  }
+  // tmux prints user options raw and list output is split on tab/newline,
+  // so a control character would shift every later field of this row.
+  const trimmed = typeof title === "string" ? title.replace(/[\u0000-\u001f\u007f]+/g, " ").trim() : "";
+  if (!trimmed) {
+    throw sessionError("EBADTITLE", "title is required");
+  }
+  if (trimmed.length > 120) {
+    throw sessionError("EBADTITLE", "title must be 120 characters or fewer");
+  }
+  const live = await get(id);
+  if (!live) throw sessionError("ENOSESSION", "session not found");
+  const target = tmuxPane(id);
+  // Lock before title: a concurrent list() that sees the new title must also
+  // see the lock, or its transcript sync would overwrite the rename.
+  requireResult(await tmux(["set-option", "-t", target, "@omp_title_lock", "1"]));
+  requireResult(await tmux(["set-option", "-t", target, "@omp_notitle", "1"]));
+  requireResult(await tmux(["set-option", "-t", target, "@omp_title", trimmed]));
+  rememberSession({
+    id,
+    folder: live.folder,
+    profile: live.profile || "default",
+    type: live.type,
+    title: trimmed,
+    created: Number(live.created) || Date.now(),
+    pinned: Boolean(live.pinned),
+    notitle: true,
+    titleLocked: true,
+  });
   return get(id);
 }
 
@@ -926,7 +981,10 @@ async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
   if (noTitle === true) {
     requireResult(await tmux(["set-option", "-t", target, "@omp_notitle", "1"]));
   } else if (noTitle === false) {
+    // Opting back into auto-titles also releases a manual rename's lock;
+    // otherwise the transcript title could never replace it again.
     await tmux(["set-option", "-t", target, "-u", "@omp_notitle"]);
+    await tmux(["set-option", "-t", target, "-u", "@omp_title_lock"]);
   }
   await tmux(["set-option", "-t", target, "-u", "@omp_transcript"]);
   // The transcript names the model only once the new runtime's first reply
@@ -945,6 +1003,7 @@ async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
     created: Number(s.created) || Date.now(),
     pinned: Boolean(s.pinned),
     notitle: noTitle === true || (noTitle !== false && s.notitle === true),
+    titleLocked: noTitle !== false && s.titleLocked === true,
   });
 
   return get(id);
@@ -1180,7 +1239,7 @@ async function contextWindowFor(profile, provider, model) {
 }
 
 module.exports = {
-  list, get, exists, create, setPinned, scroll, scrollState, setScrollPosition,
+  list, get, exists, create, setPinned, renameTitle, scroll, scrollState, setScrollPosition,
   kill, reloadProfile, tmuxName, tmuxPane, resolvePane, bootstrap, OPT_KEYS,
   sendText, sendKeys, configuredEffortFor, contextWindowFor, launchIdentityFor, restorable,
   restore, forgetGhost,

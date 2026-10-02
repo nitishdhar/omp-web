@@ -16,15 +16,29 @@ import { workspaceRelative } from "./paths.js";
 // Runs before main.js wires the action buttons, so those assignments stay safe.
 export function ensureSkeleton() {
   if (el["ghost-mode"] && el["ghost-title"] && el["ghost-summary"] && el["ghost-meta"]
-      && el["ghost-restore-btn"] && el["ghost-copy-btn"] && el["ghost-forget-btn"]) return;
+      && el["ghost-back-btn"] && el["ghost-restore-btn"] && el["ghost-copy-btn"] && el["ghost-forget-btn"]) return;
   const host = document.querySelector(".content-host");
-  if (!host || el["ghost-mode"]) return;
+  if (!host) return;
+  if (el["ghost-mode"] && !el["ghost-back-btn"]) {
+    // Shell predates the Back control but has the rest: append it in place so
+    // the main.js wiring always has a target.
+    const actions = el["ghost-mode"].querySelector(".ghost-actions");
+    if (actions) {
+      const back = elem("button", { id: "ghost-back-btn", class: "ghost", type: "button", text: "Back", title: "Back to the live session" });
+      actions.prepend(back);
+      el["ghost-back-btn"] = back;
+    }
+    return;
+  }
+  // Present but incomplete in an unexpected way: never build a second skeleton.
+  if (el["ghost-mode"]) return;
   const section = elem("section", { id: "ghost-mode", "aria-labelledby": "ghost-title", hidden: true });
   section.append(elem("p", { class: "ghost-kicker", text: "Not running" }));
   section.append(elem("h1", { id: "ghost-title", text: "Session" }));
   section.append(elem("p", { id: "ghost-summary", class: "ghost-summary" }));
   section.append(elem("dl", { id: "ghost-meta", class: "ghost-meta" }));
   const actions = elem("div", { class: "ghost-actions" });
+  actions.append(elem("button", { id: "ghost-back-btn", class: "ghost", type: "button", text: "Back", title: "Back to the live session" }));
   actions.append(elem("button", { id: "ghost-restore-btn", class: "primary", type: "button", text: "Restore session" }));
   actions.append(elem("button", { id: "ghost-copy-btn", class: "ghost", type: "button", text: "Copy folder path" }));
   actions.append(elem("button", { id: "ghost-forget-btn", class: "danger ghost", type: "button", text: "Forget" }));
@@ -32,7 +46,7 @@ export function ensureSkeleton() {
   host.append(section);
   el["ghost-mode"] = section;
   for (const id of ["ghost-title", "ghost-summary", "ghost-meta",
-    "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn"]) {
+    "ghost-back-btn", "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn"]) {
     const node = section.querySelector(`#${CSS.escape(id)}`);
     if (node) el[id] = node;
   }

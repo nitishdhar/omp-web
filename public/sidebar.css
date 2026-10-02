@@ -16,7 +16,13 @@
 /* The + is a secondary action and was outweighing the mark. 26px keeps a
    comfortable pointer target while letting the brand lead the header;
    compact still overrides it to a 44px touch target below. */
-.side-head #new-btn { display: inline-grid; place-items: center; width: 26px; min-width: 26px; height: 26px; min-height: 26px; margin-left: auto; padding: 0; border-radius: 7px; }
+.side-head #new-btn { display: inline-grid; place-items: center; width: 32px; min-width: 32px; height: 32px; min-height: 32px; margin-left: auto; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); }
+.side-head #new-btn:hover { background: var(--panel-3); color: var(--text); }
+/* Header actions are embedded chrome, not calls to action: one 32px icon
+   rhythm, muted at rest, no accent fill and no text labels. The palette is a
+   search glyph; the shortcut lives in its title, not on screen. */
+.side-head #palette-btn { display: inline-grid; place-items: center; flex: none; width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--muted); cursor: pointer; }
+.side-head #palette-btn:hover { background: var(--panel-3); color: var(--text); }
 .new-plus { font-size: 15px; line-height: 1; }
 .side-sub { padding: 0 12px 9px; color: var(--faint); font: 11px/1.3 var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sessions { list-style: none; margin: 0; padding: 3px 7px 14px; overflow-y: auto; overscroll-behavior: contain; flex: 1; }
@@ -45,14 +51,22 @@
 .search-folder-head { margin-top: 6px; }
 
 .folder-group { list-style: none; margin: 0; }
+/* Full-bleed like session rows, so folder counts land on the same right
+   rail as row actions instead of floating inset. */
+.folder-group { margin-inline: -7px; padding-inline: 7px; }
 .folder-head { display: flex; align-items: center; width: 100%; min-width: 0; }
 .folder-toggle { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; min-height: 32px; padding: 4px 4px; border: 0; background: transparent; color: var(--muted); text-align: left; }
+/* Split hit areas keep .folder-toggle geometry: the chevron is a fixed
+   toggle-only target, the name button takes the remaining width and only
+   selects the folder (the new-session target). */
+.folder-collapse { flex: none; min-width: 20px; padding-inline: 0; }
+.folder-select { padding-inline: 0 2px; }
 .folder-toggle:hover, .folder-head.active .folder-toggle { color: var(--text); }
 .folder-toggle:focus-visible { outline-offset: -2px; }
 .folder-chevron { flex: none; width: 10px; color: var(--faint); transform: rotate(90deg); transition: transform .12s ease; text-align: center; }
 .folder-group.collapsed .folder-chevron { transform: rotate(0); }
 .folder-name { font: 12px var(--font-ui); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.folder-count { margin-left: auto; color: var(--faint); font: 10.5px var(--font-ui); }
+.folder-count { flex: none; align-self: center; color: var(--faint); font: 10.5px var(--font-ui); }
 .folder-sessions { list-style: none; margin: 0; padding: 0; }
 /* Depth was carried by an indent that cost every nested title 16px of width
    while the second line already names the folder. Groups separate with a
@@ -64,19 +78,20 @@
 .folder-toggle { padding-inline: 0; }
 .folder-head { margin-inline: 0; }
 /* Folders with nothing live stay listed (they are where you start new work)
-   but quiet: one tight line, no divider, full strength on hover or focus. */
+   but quiet: dimmed only — same row height as live groups, so the rail keeps
+   one rhythm and empty folders read as quiet, not shrunken. */
 .folder-group.folder-leaf { margin-top: 0; padding-top: 0; border-top: 0; opacity: .6; }
 .folder-leaf:hover, .folder-leaf:focus-within, .folder-leaf:has(.folder-head.active) { opacity: 1; }
-.folder-leaf .folder-toggle { gap: 6px; min-height: 26px; padding-left: 1px; }
+.folder-leaf .folder-toggle { gap: 6px; min-height: 32px; padding-left: 1px; }
 .folder-leaf .icon { flex: none; color: var(--faint); }
-@media (max-width: 1099px) { .folder-leaf .folder-toggle { min-height: 40px; } }
+@media (max-width: 1099px) { .folder-leaf .folder-toggle { min-height: 44px; } }
 
 /* Full-bleed rows. Nested rows used to sit indented, so the selected rail
    landed at an arbitrary x in the middle of the list and read as a stray blue
    tick rather than a selection. Every row now shares one left edge and the
    band spans the whole rail. */
 .sess {
-  display: flex; align-items: stretch; min-width: 0; min-height: 36px;
+  display: flex; align-items: stretch; gap: 2px; min-width: 0; min-height: 36px;
   margin: 1px -7px; padding-inline: 7px; position: relative; border-radius: 0;
 }
 .sess:hover { background: var(--row-hover); }
@@ -96,6 +111,10 @@
   background: color-mix(in srgb, var(--warn) 16%, transparent);
   color: var(--warn); font-size: 9.5px; font-weight: 700; letter-spacing: .01em;
 }
+/* The active band alone washed out on dense rails; the open title carries
+   full text color and weight too. Later in the cascade than base.css, so it
+   wins over the calm-state title recession at equal specificity. */
+.sess.active .title { color: var(--text); font-weight: 650; }
 .unread-dot { flex: none; color: var(--accent); font-size: 9px; line-height: 1; }
 .session-folder {
   flex: none; max-width: 72px; overflow: hidden; color: var(--faint);
@@ -108,6 +127,17 @@
 .sess:hover .row-menu, .folder-head:hover .row-menu, .row-menu:focus-visible { opacity: 1; }
 .row-menu:hover { background: var(--panel-3); color: var(--text); }
 .folder-menu { margin-left: 0; }
+/* Desktop: the menu overlays the pin's spot at the right edge on hover, so
+   the pin aligns to the edge instead of sitting inset for an invisible
+   button. The pin yields while the menu is up; unpin lives in the menu.
+   Ghost rows have no pin to overlay: their menu stays in flow so it never
+   covers the inline Restore button. */
+@media (min-width: 1100px) {
+  .sess:not(.ghost) .row-menu { position: absolute; right: 7px; top: 50%; transform: translateY(-50%); margin-right: 0; background: var(--panel-2); z-index: 1; }
+  .sess:hover .row-pin, .sess:focus-within .row-pin:not(:focus-visible) { opacity: 0; }
+  .sess:hover .row-menu, .sess:focus-within .row-menu { opacity: 1; }
+  .row-pin:focus-visible, .row-menu:focus-visible { opacity: 1; }
+}
 
 .pop-menu { position: fixed; z-index: 40; min-width: 184px; padding: 4px; background: var(--pop-bg); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--pop-shadow); }
 .pop-title { padding: 6px 8px 4px; color: var(--faint); font-size: 10px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 232px; }
@@ -137,6 +167,8 @@
   .view-btn { min-height: 44px; font-size: 13px; }
   .folder-toggle { min-height: 44px; }
   .sess { min-height: 44px; }
+  .side-head #new-btn { width: 44px; min-width: 44px; min-height: 44px; }
+  .side-head #palette-btn { width: 44px; min-width: 44px; height: 44px; min-height: 44px; }
   .sess-open { min-height: 44px; padding: 7px 6px; }
   .sess .title { font-size: 14px; }
   .session-folder { max-width: 104px; font-size: 10.5px; }
@@ -148,6 +180,9 @@
      identity/urgency signal that desktop gets from tooltips. */
   .sess .row2 { font-size: 11.5px; }
   .needs-you { padding: 2px 7px; font-size: 10.5px; }
+  /* Under 16px iOS zooms the page when the rename field takes focus. The base
+     .rename-input rule sits later in this file, hence the row qualifier. */
+  .sess .rename-input { font-size: 16px; min-height: 36px; }
 }
 @media (max-width: 780px) { #sidebar { width: 100%; flex-basis: 100%; } }
 @media (min-width: 1100px) { .window-count { display: inline; } }
@@ -205,14 +240,14 @@
    as well as in the Pinned section. */
 .row-pin {
   display: inline-flex; align-items: center; justify-content: center; align-self: center;
-  flex: none; width: 26px; height: 26px; border: 0; border-radius: 5px;
+  flex: none; width: 28px; height: 28px; border: 0; border-radius: 5px;
   background: transparent; color: var(--faint); opacity: 0;
   transition: opacity .12s ease, color .12s ease, background-color .12s ease;
 }
 .sess:hover .row-pin, .row-pin:focus-visible { opacity: 1; }
 .row-pin:hover { background: var(--panel-3); color: var(--text); }
-/* Hover-only, like the row menu. Pinned rows read their state from the Pinned
-   section; on hover the lit accent distinguishes pinned from not. */
+/* Pinned is a section, not a badge: the row lives under Pinned, so the pin
+   only needs to read as pinned when revealed (accent), never always-on. */
 .row-pin.is-pinned { color: var(--accent); }
 .row-pin.is-pinned:hover { color: var(--text); }
 @media (max-width: 1099px) {
@@ -222,9 +257,9 @@
 /* Marks the folder holding the open session without disturbing what the user
    expanded or collapsed. */
 .folder-head.holds-current .folder-name { color: var(--text); }
-.folder-head.holds-current .folder-toggle::after {
-  content: ""; width: 5px; height: 5px; margin-left: 6px; border-radius: 50%;
-  background: var(--accent); flex: none;
+.folder-head.holds-current .folder-name::after {
+  content: ""; display: inline-block; width: 5px; height: 5px; margin-left: 6px;
+  border-radius: 50%; background: var(--accent); vertical-align: middle;
 }
 
 /* The footer was inert chrome reporting counts; it now hosts settings. */
@@ -251,6 +286,9 @@
   border-radius: 7px;
   pointer-events: none;
 }
+/* Ghosts reuse the Unknown hollow treatment but square: "not running" must
+   not read as just another idle agent at a glance. */
+.dot.ghost-dot { border-radius: 2px; }
 .sess.ghost:hover { opacity: .8; background: transparent; }
 /* The selected ghost previews in the main pane; lift the dim and mark the
    outline so the row reads as the current view, like .active live rows. */
@@ -266,3 +304,15 @@
   background: var(--panel-2); color: var(--text); font-size: 11px; font-weight: 550;
 }
 .restore-all:hover { background: var(--panel-3); border-color: var(--accent); }
+/* Inline Restore on ghost rows: the row itself still opens the detail
+   preview, this button restores straight away. Always visible — a ghost's
+   only forward action should not hide under hover. */
+.ghost-restore { align-self: center; flex: none; min-height: 26px; margin-right: 2px; padding: 2px 9px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font-size: 11px; font-weight: 550; }
+.ghost-restore:hover { background: var(--panel-3); border-color: var(--accent); color: var(--text); }
+@media (max-width: 1099px) { .ghost-restore { min-height: 40px; padding: 6px 12px; } }
+/* Search answers "how much" first: one quiet count line above the results. */
+.search-count { list-style: none; padding: 4px 6px 6px; color: var(--faint); font-size: 11px; }
+/* Inline rename input replaces the title in place; it reads as an edit, not
+   a second row, and fills the title's width. */
+.rename-input { flex: 1; min-width: 0; padding: 1px 5px; border: 1px solid var(--accent); border-radius: 4px; background: var(--panel-2); color: var(--text); font-size: 12.5px; }
+.sess.renaming .sess-open { cursor: text; }

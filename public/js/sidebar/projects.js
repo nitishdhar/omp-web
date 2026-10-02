@@ -5,12 +5,37 @@ import { state, emit } from "../state.js";
 import { elem } from "../dom.js";
 import { icon } from "../icons.js";
 import * as menu from "./menu.js";
-import { sessionRow, ghostRow } from "./rows.js";
+import { sessionRow, ghostRow, sessionPeeksUnread, startInlineRename } from "./rows.js";
 import { copyWithNotice } from "../notice.js";
+import { score } from "../match.js";
+import { workspaceRelative } from "../paths.js";
+import { sessionStatus } from "../session-status.js";
 
 const collapsedProjects = new Set();
 const knownProjects = new Set();
 let activeProject = null;
+// Folder collapse is chrome, not truth: tmux owns sessions, localStorage owns
+// which folders start shut. First run derives quiet folders collapsed; the
+// stored set wins after that and every toggle saves immediately.
+const COLLAPSED_KEY = "omp_web_collapsed_projects_v1";
+let collapseHasStored = false;
+function loadCollapsed() {
+  try {
+    const raw = localStorage.getItem(COLLAPSED_KEY);
+    if (raw == null) return;
+    collapseHasStored = true;
+    const list = JSON.parse(raw);
+    if (Array.isArray(list)) {
+      for (const path of list) if (typeof path === "string") collapsedProjects.add(path);
+    }
+  } catch {}
+}
+loadCollapsed();
+function persistCollapsed() {
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsedProjects]));
+  } catch {}
+}
 
 function openSessionMenu(anchor, session) {
   const items = [
@@ -18,6 +43,15 @@ function openSessionMenu(anchor, session) {
       label: session.pinned ? "Unpin" : "Pin",
       icon: "pin",
       action: () => emit("session:pin", { id: session.id, pinned: !session.pinned }),
+    },
+    {
+      // Opens the inline row editor; main.js owns the PATCH behind the
+      // session:rename intent the commit emits.
+      label: "Rename",
+      action: () => {
+        const li = anchor.closest?.("li.sess");
+        if (li) startInlineRename(li, session);
+      },
     },
   ];
   if (session.type !== "shell") {
@@ -28,7 +62,7 @@ function openSessionMenu(anchor, session) {
     });
   }
   items.push({
-    label: "Kill",
+    label: "Kill session...",
     icon: "x",
     danger: true,
     action: () => emit("session:kill", session.id),
@@ -73,15 +107,46 @@ function stableCreatedOrder(a, b) {
     || String(a.id).localeCompare(String(b.id));
 }
 
-function includesQuery(value, query) {
-  return String(value || "").toLocaleLowerCase().includes(query);
+// Sidebar search: free terms fuzzy-match through the shared subsequence
+// scorer — one matcher for the whole app — plus explicit filters
+// status:working|waiting|idle|done, is:pinned, type:agent|shell (agent is
+// anything but a shell). Every term must hit some field.
+function parseSearch(query) {
+  const filters = { status: [], pinnedOnly: false, type: null, terms: [] };
+  for (const token of String(query || "").trim().split(/\s+/).filter(Boolean)) {
+    const colon = token.indexOf(":");
+    if (colon > 0) {
+      const key = token.slice(0, colon).toLowerCase();
+      const value = token.slice(colon + 1).toLowerCase();
+      if (key === "status" && ["working", "waiting", "idle", "done"].includes(value)) {
+        filters.status.push(value);
+        continue;
+      }
+      if (key === "is" && value === "pinned") {
+        filters.pinnedOnly = true;
+        continue;
+      }
+      if (key === "type" && (value === "agent" || value === "shell")) {
+        filters.type = value;
+        continue;
+      }
+    }
+    filters.terms.push(token);
+  }
+  return filters;
 }
-function sessionMatches(session, query) {
-
-  return includesQuery(session.title, query)
-    || includesQuery(session.folder, query)
-    || includesQuery(session.profile, query)
-    || includesQuery(session.type, query);
+function fieldMatches(field, term) {
+  return score(String(field || ""), term) !== null;
+}
+function sessionMatches(session, filters) {
+  if (filters.status.length && !filters.status.includes(sessionStatus(session))) return false;
+  if (filters.pinnedOnly && !session.pinned) return false;
+  if (filters.type === "shell" && session.type !== "shell") return false;
+  if (filters.type === "agent" && session.type === "shell") return false;
+  // The folder scores workspace-relative: every absolute path shares the
+  // workspace prefix, so short queries matched every session through it.
+  const fields = [session.title, workspaceRelative(session.folder), session.profile, session.type, session.id];
+  return filters.terms.every((term) => fields.some((field) => fieldMatches(field, term)));
 }
 
 function buildFolders(sessions, ghosts = []) {
@@ -123,16 +188,29 @@ function currentFolder(sessions) {
 
 function syncDefaultCollapse(folders, sessions) {
   const current = currentFolder(sessions);
-  for (const folder of folders) {
-    if (knownProjects.has(folder.path)) continue;
-    knownProjects.add(folder.path);
-    if (folder.path !== current) collapsedProjects.add(folder.path);
-  }
   // Selecting a session used to force its folder open. Now that folders list
   // every session, that meant clicking anything in Pinned or Recent blew the
   // whole containing folder open underneath it. The folder is marked instead,
   // and stays exactly as the user left it.
   activeProject = current;
+  let derived = false;
+  for (const folder of folders) {
+    if (knownProjects.has(folder.path)) continue;
+    knownProjects.add(folder.path);
+    // Stored state wins: anything decided in a previous run stays as left.
+    if (collapseHasStored || collapsedProjects.has(folder.path)) continue;
+    // First-run default only: a folder with nothing waiting, working, or
+    // unread — and not holding the open session — starts collapsed, so a
+    // restart restores the project grouping instead of a chronological soup.
+    derived = true;
+    const signal = folder.path === current
+      || folder.sessions.some((session) =>
+        sessionStatus(session) === "waiting"
+        || sessionStatus(session) === "working"
+        || sessionPeeksUnread(session));
+    if (!signal) collapsedProjects.add(folder.path);
+  }
+  if (derived) persistCollapsed();
 }
 
 function folderMenuButton(folder) {
@@ -149,29 +227,51 @@ function folderMenuButton(folder) {
 
 function folderHeading(folder, expanded) {
   const holdsCurrent = folder.path === activeProject;
+  const selected = folder.path === state.selectedFolder;
   const heading = elem("div", {
     class: "folder-head"
-      + (folder.path === state.selectedFolder ? " active" : "")
+      + (selected ? " active" : "")
       + (holdsCurrent ? " holds-current" : ""),
   });
+  // Two buttons, one action: chevron and name both toggle collapse (the
+  // whole heading is the expand target users expect); the name also sets
+  // the selected folder. Both keep .folder-toggle for row geometry.
   const toggle = elem("button", {
-    class: "folder-toggle",
+    class: "folder-toggle folder-collapse",
     type: "button",
     "aria-expanded": String(expanded),
-    "aria-pressed": String(folder.path === state.selectedFolder),
-    title: folder.path,
+    "aria-label": `${expanded ? "Collapse" : "Expand"} ${folder.name}`,
+    title: `${expanded ? "Collapse" : "Expand"} ${folder.name}`,
     onclick: () => {
-      state.selectedFolder = folder.path;
       if (collapsedProjects.has(folder.path)) collapsedProjects.delete(folder.path);
       else collapsedProjects.add(folder.path);
+      persistCollapsed();
       emit("sidebar:rerender");
     },
   },
     elem("span", { class: "folder-chevron", text: "›", "aria-hidden": "true" }),
-    elem("span", { class: "folder-name", text: folder.name }),
-    elem("span", { class: "folder-count", text: String(folder.count ?? folder.sessions.length) }),
   );
-  heading.append(toggle, folderMenuButton(folder));
+  const select = elem("button", {
+    class: "folder-toggle folder-select",
+    type: "button",
+    "aria-pressed": String(selected),
+    "aria-label": folder.name,
+    title: folder.path,
+    onclick: () => {
+      // The whole heading is the expand target (the chevron is just the
+      // affordance); selecting-as-target rides along, as it did before the
+      // hit-area split, because New-session-here is a menu action now.
+      state.selectedFolder = folder.path;
+      if (collapsedProjects.has(folder.path)) collapsedProjects.delete(folder.path);
+      else collapsedProjects.add(folder.path);
+      persistCollapsed();
+      emit("sidebar:rerender");
+    },
+  },
+    elem("span", { class: "folder-name", text: folder.name }),
+    elem("span", { class: "folder-count", text: `(${folder.count ?? folder.sessions.length})` }),
+  );
+  heading.append(toggle, select, folderMenuButton(folder));
   return heading;
 }
 
@@ -236,13 +336,24 @@ function sessionSection(label, className, sessions, onOpen) {
 
 export function renderSearch(host, sessions, { onOpen, query, ghosts = [] } = {}) {
   menu.close({ restoreFocus: false });
-  const search = query.trim().toLocaleLowerCase();
-  const matches = sessions.filter((session) => sessionMatches(session, search)).sort(stableCreatedOrder);
-  const ghostMatches = ghosts
-    .filter((ghost) => sessionMatches({ ...ghost, type: ghost.type }, search))
-    .sort(stableCreatedOrder);
+  const filters = parseSearch(query);
+  const matches = sessions.filter((session) => sessionMatches(session, filters)).sort(stableCreatedOrder);
+  const ghostMatches = ghosts.filter((ghost) => sessionMatches(ghost, filters)).sort(stableCreatedOrder);
+  // Folders match too, so searching for a project to start in finds it even
+  // when nothing is running there.
+  // Name only: every path shares the workspace prefix, so matching on it made
+  // "workspace" return all of them. Pure-filter queries list no folders: the
+  // filters describe sessions, not projects.
+  const folderMatches = filters.terms.length
+    ? buildFolders(sessions).filter((folder) => filters.terms.every((term) => fieldMatches(folder.name, term)))
+    : [];
 
   host.replaceChildren();
+  const parts = [];
+  if (matches.length) parts.push(`${matches.length} session${matches.length === 1 ? "" : "s"}`);
+  if (ghostMatches.length) parts.push(`${ghostMatches.length} not running`);
+  if (folderMatches.length) parts.push(`${folderMatches.length} folder${folderMatches.length === 1 ? "" : "s"}`);
+  if (parts.length) host.append(elem("li", { class: "search-count", text: parts.join(" · ") }));
   for (const session of matches) {
     host.append(sessionRow(session, { onOpen, menu: openSessionMenu }));
   }
@@ -254,13 +365,8 @@ export function renderSearch(host, sessions, { onOpen, query, ghosts = [] } = {}
     section.append(list);
     host.append(section);
   }
-  // Folders match too, so searching for a project to start in finds it even
-  // when nothing is running there.
-  // Name only: every path shares the workspace prefix, so matching on it made
-  // "workspace" return all of them.
-  const folderMatches = buildFolders(sessions).filter((folder) => includesQuery(folder.name, search));
   for (const folder of folderMatches) host.append(emptyFolderRow(folder));
-  if (!matches.length && !ghostMatches.length && !folderMatches.length) {
+  if (!parts.length) {
     host.append(elem("li", {
       class: "empty search-empty",
       text: `No sessions or folders match “${query.trim()}”`,
@@ -268,7 +374,44 @@ export function renderSearch(host, sessions, { onOpen, query, ghosts = [] } = {}
   }
 }
 
-export function render(host, sessions, { onOpen, ghosts = [] } = {}) {
+// Recent: the last handful of sessions actually touched, newest first.
+// Folders sort by creation (stable, per the rail's ordering rule), so without
+// this, work from yesterday sinks into collapsed folders and reads as lost
+// unless pinned. Recent is a shortcut, not a home: its rows stay in their
+// folders too. lastActivity bumps on every attach, so a live ranking would
+// reorder Recent the moment a row is clicked; while the sidebar is in use the
+// painted membership and order hold (gone sessions drop out, nothing joins or
+// moves) and index.js re-renders once the user is done.
+let paintedRecent = null;
+// Same rule the Needs/Working/Pinned sections hoist by: those rows already
+// sit at the top, so Recent spends its five slots elsewhere.
+function hoisted(session) {
+  return session.pinned
+    || (session.type !== "shell" && (session.status === "waiting" || session.status === "working"));
+}
+function freshRecent(sessions) {
+  return sessions
+    .filter((s) => !hoisted(s) && Number(s.lastActivity) > 0)
+    .sort((a, b) => (Number(b.lastActivity) || 0) - (Number(a.lastActivity) || 0) || stableCreatedOrder(a, b))
+    .slice(0, 5);
+}
+function recentSessions(sessions, frozen) {
+  if (!frozen || !paintedRecent) return freshRecent(sessions);
+  const byId = new Map(sessions.map((s) => [s.id, s]));
+  return paintedRecent.map((id) => byId.get(id)).filter(Boolean);
+}
+// The Recent ids a render would paint now; part of the poll render gate so a
+// reorder repaints once the freeze lifts, and stays put while it holds.
+export function recentKey(sessions, frozen) {
+  return recentSessions(sessions, frozen).map((s) => s.id);
+}
+// Whether lifting the freeze would change what Recent shows.
+export function recentIsStale(sessions) {
+  return paintedRecent !== null
+    && freshRecent(sessions).map((s) => s.id).join("\n") !== paintedRecent.join("\n");
+}
+
+export function render(host, sessions, { onOpen, ghosts = [], freezeRecent = false } = {}) {
   menu.close({ restoreFocus: false });
   const folders = buildFolders(sessions, ghosts);
   syncDefaultCollapse(folders, sessions);
@@ -295,16 +438,23 @@ export function render(host, sessions, { onOpen, ghosts = [] } = {}) {
     .sort(stableCreatedOrder);
   const pinnedSection = sessionSection("Pinned", "pinned-section", pinned, onOpen);
   if (pinnedSection) host.append(pinnedSection);
+  for (const session of pinned) sidelined.add(session.id);
+  // Recent rows are not sidelined: see recentSessions for why and for the freeze.
+  const recent = recentSessions(sessions, freezeRecent);
+  paintedRecent = recent.map((s) => s.id);
+  const recentSection = sessionSection("Recent", "recent-section", recent, onOpen);
+  if (recentSection) host.append(recentSection);
 
   // Every workspace folder is listed, not only the ones with a live session:
   // the sidebar is also where you pick a project to start in, and folders
   // vanishing as their last session ended read as data loss.
   for (const folder of folders) {
-    // Waiting/working sessions hoist out of their folders; pinned ones stay
-    // put as well as listing under Pinned, so a pinned row never vanishes
-    // from its project.
+    // One session, one place for the status/pin sections: waiting/working/
+    // pinned hoist into their ranked sections above and do not duplicate into
+    // folders. A pinned row lives under Pinned; its folder is where it returns
+    // when unpinned. Recent is the exception and leaves rows in place.
     const rows = folder.sessions
-      .filter((session) => !sidelined.has(session.id) || session.pinned)
+      .filter((session) => !sidelined.has(session.id))
       .sort(stableCreatedOrder);
     // Not-running sessions belong to their folder too; the count is every
     // session the folder lists, live or not.

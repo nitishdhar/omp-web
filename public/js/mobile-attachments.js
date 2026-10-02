@@ -378,7 +378,11 @@ export function wireAttachments({
     picker.click();
   });
 
-  picker.addEventListener("change", () => upload(picker.files?.[0]));
+  // Multi-file: picker (multiple) and drop both hand over a FileList; every
+  // file uploads, not just the first. Paste already loops the same way. The
+  // picker's FileList is live: a rejected file clears picker.value, which would
+  // empty it mid-loop, so snapshot it first.
+  picker.addEventListener("change", () => { for (const file of Array.from(picker.files || [])) void upload(file); });
 
   const drop = dropTarget || root;
   drop.addEventListener("dragover", (event) => {
@@ -391,7 +395,7 @@ export function wireAttachments({
     if (!event.dataTransfer?.files?.length) return;
     event.preventDefault();
     drop.classList.remove("attachment-drop-active");
-    upload(event.dataTransfer.files[0]);
+    for (const file of event.dataTransfer.files) void upload(file);
   });
 
   pasteTarget?.addEventListener("paste", (event) => {

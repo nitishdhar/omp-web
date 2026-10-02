@@ -7,6 +7,7 @@ import { emit, state } from "../state.js";
 import { api } from "../api.js";
 import { defaultChoice } from "../new-session.js";
 import { workspaceRelative } from "../paths.js";
+import { icon } from "../icons.js";
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -118,7 +119,6 @@ function refreshGitStatus() {
     gitInFlight = null;
   }
   if (!id || gitInFlight || Date.now() - gitRequestedAt < GIT_STATUS_TTL_MS) return;
-
   gitRequestedAt = Date.now();
   const request = api(`/sessions/${encodeURIComponent(id)}/git`);
   gitInFlight = request;
@@ -170,13 +170,15 @@ function renderStatus(derived) {
   if (cwd) {
     parts.push(elem("span", { class: "cs-item cs-cwd", title: cwd }, workspaceRelative(cwd)));
   }
+  // Git reads as one coupled unit — branch icon, branch, dirty count tight
+  // together — never loose text drifting in the middle of the composer.
   if (git) {
     const title = gitStatusTitle(git);
-    const details = [elem("span", { class: "cs-git-branch" }, git.branch)];
-    if (git.dirty) details.push(elem("span", { class: "cs-git-detail" }, `${git.dirty} dirty`));
-    if (git.ahead) details.push(elem("span", { class: "cs-git-detail" }, `↑${git.ahead}`));
-    if (git.behind) details.push(elem("span", { class: "cs-git-detail" }, `↓${git.behind}`));
-    parts.push(elem("span", { class: "cs-item cs-git", title, "aria-label": title }, ...details));
+    const unit = [icon("branch", 12), elem("span", { class: "cs-git-branch" }, git.branch)];
+    if (git.dirty) unit.push(elem("span", { class: "cs-git-detail" }, `${git.dirty} dirty`));
+    if (git.ahead) unit.push(elem("span", { class: "cs-git-detail" }, `↑${git.ahead}`));
+    if (git.behind) unit.push(elem("span", { class: "cs-git-detail" }, `↓${git.behind}`));
+    parts.push(elem("span", { class: "cs-item cs-git", title, "aria-label": title }, ...unit));
   }
 
   // A null percent means the transcript did not expose a context window, so a
@@ -207,16 +209,55 @@ function renderStatus(derived) {
   node.append(...parts);
 }
 
+// ── Interrupt visibility (single source) ──────────────────────────────────────
+// Stop is visible iff a turn is live: a chat session is set AND derived
+// activity arrived within the recent window. Poll-in-flight is deliberately
+// not a signal: the poll fires every 1.2s/350ms, so keying visibility to it
+// strobes the control on every round trip even while the agent is idle.
+// Derived-only with a grace window covers send-to-first-poll and quiet gaps.
+const INTERRUPT_RECENT_MS = 3500;
+let interruptHasSession = false;
+let interruptLastActivityAt = 0;
+let interruptPending = false;
+
+function syncInterruptVisibility() {
+  const interrupt = el["chat-interrupt"];
+  if (!interrupt) return;
+  // An in-flight Stop request keeps the control mounted so its pending and
+  // confirmed affordances never flash on a hidden node.
+  if (interruptPending) {
+    interrupt.hidden = false;
+    return;
+  }
+  const recent = Date.now() - interruptLastActivityAt < INTERRUPT_RECENT_MS;
+  const live = interruptHasSession && recent;
+  interrupt.hidden = !live;
+}
+
+/** Chat session selected; drives Stop visibility with poll/activity signals. */
+export function setInterruptSession(on) {
+  interruptHasSession = Boolean(on);
+  // The activity timestamp belongs to the previous session; a fresh one must
+  // re-earn Stop visibility from its own polls.
+  interruptLastActivityAt = 0;
+  syncInterruptVisibility();
+}
+
+/** Optimistic Stop request in flight; never hide while the agent may respond. */
+export function setInterruptPending(on) {
+  interruptPending = Boolean(on);
+  syncInterruptVisibility();
+}
+
 // ── Activity line (#chat-activity) ────────────────────────────────────────────
 
 function renderActivity(derived) {
   const { activity } = derived;
-  const interrupt = el["chat-interrupt"];
-  const active = Boolean(activity);
-  if (interrupt) interrupt.hidden = !active;
+  if (activity) interruptLastActivityAt = Date.now();
+  syncInterruptVisibility();
   const node = el["chat-activity"];
   if (!node) return;
-  const activityKey = activity && [activity.intent, activity.toolName, activity.startedAt, activity.thinking];
+  const activityKey = activity && [activity.intent, activity.startedAt, activity.thinking];
   if (!changed("activity", activityKey)) {
     const duration = elapsed(activity?.startedAt);
     const durationNode = node.querySelector(".ca-elapsed");
@@ -228,14 +269,13 @@ function renderActivity(derived) {
   clr(node);
   node.classList.toggle("chat-activity-thinking", Boolean(activity.thinking));
 
+  // The always-on line carries human words (intent) plus elapsed only; the
+  // tool name lives in the transcript group now, so it is dropped here.
   const dot = elem("span", { class: "ca-pulse", "aria-hidden": "true" });
   const intent = elem("span", { class: "ca-intent" });
   intent.textContent = activity.intent || "";
-  const tool = elem("span", { class: "ca-tool" });
-  tool.textContent = activity.toolName || "";
 
   node.append(dot, intent);
-  if (activity.toolName) node.append(elem("span", { class: "ca-sep" }, "\u00b7"), tool);
 
   const dur = elapsed(activity.startedAt);
   if (dur) {
@@ -422,6 +462,11 @@ function renderWorkflowSummary(derived) {
 let advisorSeenId = null;
 let advisorExpanded = false;
 let advisorDismissed = null;
+// Dismissing one note muted nothing: the advisor emits per turn, so the next
+// note (new id) resurrected the panel. Dismiss mutes for the whole session;
+// switching sessions changes state.current and unmutes naturally.
+let advisorMutedSession = null;
+try { advisorMutedSession = sessionStorage.getItem("omp_web_advisor_muted") || null; } catch {}
 
 function renderAdvisor(derived) {
   const node = el["chat-advisor"];
@@ -438,6 +483,7 @@ function renderAdvisor(derived) {
     advisorExpanded = false;
     advisorDismissed = null;
   }
+  if (advisorMutedSession && advisorMutedSession === state.current) { clr(node); hide(node); return; }
   if (advisor.id === advisorDismissed) { clr(node); hide(node); return; }
   const key = [advisor.id, advisor.severity, advisor.text, advisorExpanded];
   if (!changed("advisor", key)) return;
@@ -463,7 +509,7 @@ function renderAdvisor(derived) {
     type: "button",
     "aria-label": "Dismiss advisory",
     title: "Dismiss",
-    onclick: () => { advisorDismissed = advisor.id; clr(node); hide(node); },
+    onclick: () => { advisorDismissed = advisor.id; advisorMutedSession = state.current; try { sessionStorage.setItem("omp_web_advisor_muted", state.current || ""); } catch {} clr(node); hide(node); },
   }, "\u00d7");
   header.append(badge, guide, expand, dismiss);
   card.append(header);

@@ -6,6 +6,7 @@ import { el } from "../dom.js";
 import { emit, state } from "../state.js";
 import { CHAT_ATTACHMENT_ACCEPT, wireAttachments } from "../mobile-attachments.js";
 import { repinTail } from "./transcript.js";
+import { setInterruptPending } from "./panels.js";
 
 const MAX_ROWS = 8;
 const drafts = new Map();
@@ -158,10 +159,82 @@ function doSend() {
   emit("chat:send", { text });
 }
 
+// Stop pending lifecycle: the click disables immediately (optimistic pending),
+// chat.js resolves to a brief confirmed flash or back to enabled on failure.
+// Visibility stays owned by panels.js; here we only own disabled/busy styling.
+// Stop never follows the input's disabled state, so it stays operable while
+// the composer is open and a turn is live.
+const STOP_LABEL = "Stop active work";
+let interruptBusy = false;
+let interruptDoneTimer = null;
+
+function renderInterruptPending(interrupt, on) {
+  interrupt.disabled = on;
+  interrupt.classList.toggle("is-pending", on);
+  if (on) interrupt.setAttribute("aria-busy", "true");
+  else interrupt.removeAttribute("aria-busy");
+}
+
+/** Enter the optimistic pending state; idempotent for the click + send races. */
+export function beginInterruptRequest() {
+  const interrupt = el["chat-interrupt"];
+  if (!interrupt || interruptBusy || interrupt.hidden) return false;
+  interruptBusy = true;
+  clearTimeout(interruptDoneTimer);
+  interruptDoneTimer = null;
+  interrupt.classList.remove("is-done");
+  interrupt.setAttribute("aria-label", "Stopping active work");
+  renderInterruptPending(interrupt, true);
+  setInterruptPending(true);
+  return true;
+}
+
+/** Resolve pending to confirmed (brief success affordance) or failed. */
+export function endInterruptRequest(ok) {
+  const interrupt = el["chat-interrupt"];
+  interruptBusy = false;
+  setInterruptPending(false);
+  if (!interrupt) return;
+  renderInterruptPending(interrupt, false);
+  if (!ok) {
+    interrupt.classList.remove("is-done", "is-pending");
+    interrupt.setAttribute("aria-label", STOP_LABEL);
+    return;
+  }
+  interrupt.classList.remove("is-pending");
+  interrupt.classList.add("is-done");
+  interrupt.setAttribute("aria-label", "Stopped");
+  // Hold the confirmation through one paint so it reads, then hand control
+  // back; the visibility rule re-hides only once the turn is truly idle.
+  // Disable through the flash without re-entering the pending style: the
+  // confirmed state holds steady (no pulse) until control is handed back.
+  interrupt.disabled = true;
+  clearTimeout(interruptDoneTimer);
+  interruptDoneTimer = setTimeout(() => {
+    interrupt.classList.remove("is-done");
+    interrupt.setAttribute("aria-label", STOP_LABEL);
+    interrupt.disabled = false;
+  }, 900);
+}
+
+/** Drop any pending/confirmed state on session switch without flashing. */
+export function resetInterruptButton() {
+  interruptBusy = false;
+  clearTimeout(interruptDoneTimer);
+  interruptDoneTimer = null;
+  setInterruptPending(false);
+  const interrupt = el["chat-interrupt"];
+  if (!interrupt) return;
+  interrupt.classList.remove("is-pending", "is-done");
+  interrupt.removeAttribute("aria-busy");
+  interrupt.setAttribute("aria-label", STOP_LABEL);
+  interrupt.disabled = false;
+}
 /**
  * Wire the composer elements. Idempotent: safe to call multiple times.
  * Must be called after initDom() has registered the element ids.
  */
+
 export function wireComposer({ voice } = {}) {
   if (wired) return;
   const input = el["chat-input"];
@@ -254,7 +327,11 @@ export function wireComposer({ voice } = {}) {
   });
 
   send.addEventListener("click", doSend);
-  interrupt.addEventListener("click", () => emit("chat:interrupt"));
+  interrupt.addEventListener("click", () => {
+    if (interrupt.disabled || interrupt.hidden) return;
+    beginInterruptRequest();
+    emit("chat:interrupt");
+  });
 }
 
 /**
@@ -314,13 +391,15 @@ export function editComposerDraft(text, sessionId) {
 export function setComposerEnabled(on) {
   const input = el["chat-input"];
   const send = el["chat-send"];
-  const interrupt = el["chat-interrupt"];
   const attach = el["chat-attach"];
   const voice = el["chat-voice"];
-  if (!input || !send || !interrupt) return;
+  if (!input || !send) return;
 
   input.disabled = !on;
-  interrupt.disabled = !on;
+  // Stop owns its own disabled state (optimistic pending + confirmed flash),
+  // so it stays operable while the composer is open and a turn is live. The
+  // visibility rule in panels.js hides it when no turn is live, which covers
+  // the no-session case this line used to handle.
   // Attachments need a session directory to upload into; the landing composer
   // has none until the first message creates one.
   if (attach) attach.disabled = !on || !activeSessionId;

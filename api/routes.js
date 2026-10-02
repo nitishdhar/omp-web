@@ -216,6 +216,15 @@ async function handleApi(req, res, url) {
       return sendError(res, error);
     }
   }
+  if (req.method === "PATCH" && sub[0] === "sessions" && sub[1] && sub[2] === "title" && sub.length === 3) {
+    try {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const session = await sessions.renameTitle(sub[1], body.title);
+      return sendJson(res, 200, { session });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
   if (req.method === "DELETE" && sub[0] === "sessions" && sub[1] && sub.length === 2) {
     try {
       await sessions.kill(sub[1]);
