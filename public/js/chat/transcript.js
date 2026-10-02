@@ -7,6 +7,7 @@ import { apiResponse } from "../api.js";
 import { el, elem } from "../dom.js";
 import { icon } from "../icons.js";
 import { state, emit } from "../state.js";
+import { fitRail, initRail, markActive, syncRail } from "./rail.js";
 
 const WINDOW_SIZE = 240;
 const HISTORY_STEP = 200;
@@ -94,13 +95,70 @@ function scrollToTail(container, refreshWindow = true) {
   container.scrollTop = container.scrollHeight;
   observedScrollTop = container.scrollTop;
   setFollowTail(true);
+  scheduleRailActive();
 }
+
+function userTurns() {
+  const turns = [];
+  for (const id of timeline) {
+    const item = itemData.get(id);
+    if (item?.kind === "user") turns.push({ id, text: item.text, at: timestamps.get(id) });
+  }
+  return turns;
+}
+
+// The turn you are reading is the last user message whose top has scrolled
+// past the top of the log; before the first one, the first visible one.
+let railFrame = 0;
+function scheduleRailActive() {
+  if (railFrame) return;
+  railFrame = requestAnimationFrame(() => {
+    railFrame = 0;
+    const container = el["chat-log"];
+    if (!container) return;
+    const top = container.getBoundingClientRect().top + 48;
+    let current = null;
+    for (const node of container.querySelectorAll(".chat-item.chat-user[data-id]")) {
+      if (node.getBoundingClientRect().top > top) {
+        current ||= node;
+        break;
+      }
+      current = node;
+    }
+    markActive(current?.dataset.id || null);
+    fitRail();
+  });
+}
+
+// Rail click: mount a window around the turn when it is outside the current
+// one, then put it at the top of the log. Leaving the tail stops follow, so
+// a reply landing meanwhile does not yank the view back down.
+function jumpToTurn(id) {
+  const container = el["chat-log"];
+  const index = timeline.indexOf(id);
+  if (!container || index === -1) return;
+  if (index < windowStart || index >= windowStart + WINDOW_SIZE) {
+    windowStart = Math.max(0, Math.min(index - 20, tailStart()));
+    syncRenderedWindow(container);
+  }
+  const node = nodes.get(id);
+  if (!node) return;
+  container.scrollTop += node.getBoundingClientRect().top - container.getBoundingClientRect().top - 16;
+  observedScrollTop = container.scrollTop;
+  setFollowTail(isTailWindow() && tailGap(container) <= TAIL_THRESHOLD_PX);
+  node.classList.remove("chat-turn-flash");
+  void node.offsetWidth;
+  node.classList.add("chat-turn-flash");
+  markActive(id);
+}
+initRail(jumpToTurn);
 
 function wireTailFollow(container) {
   if (tailWired) return;
   tailWired = true;
   observedScrollTop = container.scrollTop;
   container.addEventListener("scroll", () => {
+    scheduleRailActive();
     if (Date.now() < suppressScrollUntil) {
       observedScrollTop = container.scrollTop;
       return;
@@ -1522,6 +1580,8 @@ function syncRenderedWindow(container) {
   if (laterCount > 0) frag.append(historyButton("later", laterCount, container));
   container.replaceChildren(frag);
   placeActivityNode(container);
+  syncRail(userTurns());
+  scheduleRailActive();
 }
 
 function replaceRenderedItem(item) {
@@ -1614,6 +1674,9 @@ export function upsertItems(items) {
   if (followTail) windowStart = tailStart();
   if (structuralChange) syncRenderedWindow(container);
   if (followTail) scrollToTail(container, false);
+  // In-place user edits (pending -> delivered, truncation) change previews
+  // without a window sync; the rail skips the redraw when nothing changed.
+  syncRail(userTurns());
 }
 
 export function removeItem(id) {
@@ -1680,4 +1743,5 @@ export function clearLog() {
     placeActivityNode(container);
     observedScrollTop = container.scrollTop;
   }
+  syncRail([]);
 }

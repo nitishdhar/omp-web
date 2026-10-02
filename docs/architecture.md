@@ -85,7 +85,7 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | `public/js/terminal.js` | xterm init/fit, serialized output writes with byte acknowledgements, coalesced touch scrolling + absolute history scrubber, confirmed deferred-input settlement, WebSocket reconnection/identity guards, synchronized active-title lifecycle status, and compact-layout focus protection. Terminal connection health remains separate metadata; a closed socket adds a red ring without replacing the lifecycle fill color. |
 | `public/js/quickkeys.js` | Quick-key toolbar plus the mobile Terminal composer: session-owned input drafts, attachment insertion, shared-controller dictation, Return submission, deferred-input settlement, and retry state. |
 | `public/js/chat.js` | Chat poll/cursor lifecycle, reload epoch invalidation, adaptive active-turn refresh, and per-session optimistic sends. Failed or delivery-unknown messages remain visible with explicit **Retry** and **Edit**; authoritative echoes reconcile by full-text SHA-256 or, within the same send window, a whitespace-normalized full preview. Idle sessions poll at the normal cadence; live turn activity temporarily tightens refresh latency without introducing a second writer or event channel. |
-| `public/js/chat/` | `transcript.js` (bounded renderer: payloads in memory, one fixed-size DOM window, tool bodies built only when opened), `composer.js` (wires `#chat-input`/`#chat-send`/`#chat-interrupt`, emits intent events only), `panels.js` (derived-state workflow inspector + composer dock, re-rendered every poll cycle), `hash.js` (SHA-256 for optimistic-echo reconciliation). A centered safe-Markdown transcript, a 240-entry DOM history window with 200-entry paging, lazy nested tool details, compact visible tool-name/count receipts, message actions, a **Jump to now** control, a persistent current-workflow strip with expandable Todo + active agents, persistent live-intent/runtime metadata, and a composer with session-scoped drafts, voice input, image upload/drop, draft-aware send readiness, and compact-screen transcription that does not summon the software keyboard before the user chooses to edit. |
+| `public/js/chat/` | `transcript.js` (bounded renderer: payloads in memory, one fixed-size DOM window, tool bodies built only when opened), `rail.js` (turn rail drawn from the transcript's full timeline; transcript.js owns the jump), `composer.js` (wires `#chat-input`/`#chat-send`/`#chat-interrupt`, emits intent events only), `panels.js` (derived-state workflow inspector + composer dock, re-rendered every poll cycle), `hash.js` (SHA-256 for optimistic-echo reconciliation). A centered safe-Markdown transcript, a 240-entry DOM history window with 200-entry paging, lazy nested tool details, compact visible tool-name/count receipts, message actions, a **Jump to now** control, a persistent current-workflow strip with expandable Todo + active agents, persistent live-intent/runtime metadata, and a composer with session-scoped drafts, voice input, image upload/drop, draft-aware send readiness, and compact-screen transcription that does not summon the software keyboard before the user chooses to edit. |
 | `public/js/sidebar/` | `index.js` (search + one render key + the midnight `nextActivityBoundaryAt` for main.js rollover scheduling), `projects.js` (Needs you / Working / Pinned, folder groups that carry only their remaining sessions, and the collapsed **Not running** section), `resize.js` (persisted desktop column width), `rows.js`, and one shared popover in `menu.js`. The old Recent `activity.js` is deleted; one ranked list serves both jobs. |
 | `public/js/notice.js` | The single transient-feedback surface, rendered into `#copy-flash`. Every app-level action (pin, kill, restore, forget, reload, copy path) reports success and failure through it; no `alert()` remains. |
 | `public/js/new-session.js` | Session creation shared by the modal and the landing composer: remembered folder/profile choice, message-derived session name, and the bounded `POST /api/sessions` call. |
@@ -221,16 +221,24 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   updates and history remounts; removal/session clear resets expansion.
   Copy/time icon actions sit outside the blue bubble, with explicit copy
   success/failure feedback and 44px compact-layout targets.
-- Chat type is scaled to the app chrome: 13.5px/1.6 assistant prose and user
-  bubbles on desktop (14px on compact layouts), 15.5px h1/h2, 12px code, and a
-  13.5px composer that still rises to 16px on compact layouts so iOS does not
-  zoom the field.
+- Chat type is scaled to the app chrome: 14px/1.7 assistant prose and 14px/1.6
+  user bubbles on desktop, 15.5px h1/h2, 12px code, and a 14px composer that
+  still rises to 16px on compact layouts so iOS does not zoom the field. Turns
+  sit 26px apart (14px on compact layouts).
+- The header is a breadcrumb: the session folder (workspace-relative, hidden on
+  compact layouts) `/` the session title, then a runtime tag (profile or
+  `shell`) shown only in Terminal. In Chat the composer's run row names the
+  model instead, falling back to `<profile> profile` before the first reply;
+  the provider sits in that chip's tooltip, and the working directory appears
+  only when it differs from the session folder.
 - A cold open replays the transcript in byte pages. Those pages are buffered
   and mounted once, already pinned to the tail, instead of painting each page
   and re-pinning; the buffer is bounded to 1.5s so a fast-writing session can
   never stay blank. The log scrolls instantly — no smooth animation. While a
-  selected session is replaying, `#chat-loading` shows a shimmer placeholder;
-  the `#chat-empty` landing copy is reserved for having no session selected.
+  selected session is replaying, `#chat-loading` shows a shimmer placeholder.
+  With no session selected, `#chat-empty` is the landing screen (recent
+  sessions plus the new-session target); a selected session with no messages
+  says so and names the session instead.
 - iOS keyboard open/close animates the viewport and Safari scrolls the log
   itself during that window, which used to read as the user leaving the tail
   (stuck **Jump to now** after sending). The compact chat pane is pinned below
@@ -250,6 +258,13 @@ the bottom. Terminal copy-mode/history scrolling is independent.
 - The in-memory timeline may be long, but only a 240-entry window is present in
   the DOM. Earlier/later controls move by 200 entries. Tool call bodies are
   created only when their group and call disclosures are opened.
+- The turn rail (`#chat-rail`, `chat/rail.js`, desktop only) draws one tick per
+  user message across the whole timeline, not only the mounted window, once a
+  session has 3 or more. The tick for the turn being read is highlighted;
+  clicking a tick mounts a window around that turn when needed, scrolls it to
+  the top, pauses live follow, and flashes the bubble. Past one tick per 9px
+  the ticks thin out. Ticks are pointer-only (`tabindex=-1`, rail
+  `aria-hidden`); history paging stays the keyboard path.
 - Payload caps are explicit rather than silent: truncation chips label bounded
   text/arguments/results/changes, Todo/agent/ask panels report omitted records,
   and malformed or oversized transcript records produce attributed notices.
@@ -262,16 +277,21 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   `min(420px, 100%)` and hide the resize handle, and raise interactive rows,
   search, and primary controls to 44px touch targets.
 - One list, no view tabs. Order is **Needs you** -> **Working** -> **Pinned** ->
-  every workspace folder -> a **Restore all N not running…** button. A session
-  appears in exactly one place: an attention or pinned section wins over its
-  folder.
+  **Recent** -> folders with sessions -> a **Restore all N not running…**
+  button -> **Other folders (N)**. A session appears in exactly one place: an
+  attention or pinned section wins over its folder.
 - **Every folder is listed** — the workspace root (the configured
   `OMP_WEB_WORKSPACE`, shown as **Workspace**) first, then each top-level
   folder alphabetically. A folder with sessions is a collapsible group whose
   count is every row it lists: its live sessions, then its not-running sessions
-  (dimmed ghost rows). A folder with none is one quiet line (dimmed until hover)
-  whose menu offers **New session here**. Hiding empty folders read as lost
-  work when a folder's last session ended (reverted 2026-09-23).
+  (dimmed ghost rows). A folder whose last session ended keeps its place
+  through that ghost row. Folders with no live or not-running sessions collect
+  in one **Other folders (N)** disclosure at the end (closed by default,
+  remembered in `omp_web_idle_folders_open_v1`); each is one quiet line whose
+  menu offers **New session here**. Interleaved, a few sessions sat between
+  dozens of empty rows. Hiding empty folders outright read as lost work when a
+  folder's last session ended (reverted 2026-09-23), so they stay one click
+  away and in search results.
 - **Restore all** confirms first, because each restore starts its own OMP
   process.
 - **Moved projects.** `restorable()` flags a ghost whose recorded folder no
@@ -616,8 +636,8 @@ Transport bounds checklist (every number enforced in code, not advisory):
 - **One type scale across surfaces.** The transcript is the only long-form
   reading surface, but at 14.5px prose and 16px bubbles it looked like a
   different application next to the 11–13.5px chrome. `--chat-text` in
-  `base.css` drives transcript prose, user bubbles, and the composer; the
-  mobile composer keeps an explicit 16px so iOS does not zoom on focus.
+  `base.css` (14px) drives transcript prose, user bubbles, and the composer;
+  the mobile composer keeps an explicit 16px so iOS does not zoom on focus.
 - **`~` is `$HOME`, never the workspace root.** Abbreviating
   `$HOME/workspace/omp-web` to `~/omp-web` printed a path that does not exist.
 - **`.modal { display:flex }` overrode the `hidden` attribute** (author rule

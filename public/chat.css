@@ -74,6 +74,35 @@
   background: var(--pop-bg); box-shadow: var(--pop-shadow); color: var(--text); font-size: 11px; font-weight: 650; white-space: nowrap;
 }
 .chat-jump-latest[hidden] { display: none; }
+/* Turn rail: one tick per user message just left of the reading column, the
+   active turn longer and brighter. Desktop only: ticks are pointer targets
+   and compact layouts have no gutter for them. */
+.chat-rail {
+  position: absolute; z-index: 4; top: 28px; bottom: 16px; width: 18px;
+  left: max(6px, calc(50% - var(--reading-width) / 2 - 44px)); pointer-events: none;
+}
+.chat-rail[hidden] { display: none; }
+.chat-rail-track {
+  position: absolute; top: 50%; right: 0; left: 0;
+  height: min(calc((var(--turns) - 1) * 9px), 100%); transform: translateY(-50%);
+}
+.chat-rail-tick {
+  position: absolute; left: 0; width: 18px; height: 9px; margin-top: -4.5px; padding: 0;
+  border: 0; background: transparent; cursor: pointer; pointer-events: auto;
+}
+.chat-rail-tick::before {
+  content: ""; position: absolute; top: 4px; left: 2px; width: 9px; height: 1.5px; border-radius: 1px;
+  background: var(--line-strong); transition: width .12s ease, background-color .12s ease;
+}
+.chat-rail-tick:hover::before { width: 14px; background: var(--muted); }
+.chat-rail-tick.is-active::before { width: 14px; background: var(--text); }
+.chat-rail.is-dense .chat-rail-tick:not(.is-active)::before { height: 1px; opacity: .55; }
+@media (max-width: 1099px) { .chat-rail { display: none; } }
+.chat-turn-flash .chat-bubble { animation: chat-turn-flash 1.2s ease-out; }
+@keyframes chat-turn-flash {
+  from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 70%, transparent); }
+  to { box-shadow: 0 0 0 2px transparent; }
+}
 
 /* Transcript prose */
 /* Column so the turn rule can span the reading measure while the bubble stays
