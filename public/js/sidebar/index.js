@@ -4,12 +4,27 @@
 import { emit, state } from "../state.js";
 import { el, elem } from "../dom.js";
 import * as projects from "./projects.js";
-import { rowProjection, startInlineRename } from "./rows.js";
+import { onRenameEnd, renameActive, rowProjection, startInlineRename } from "./rows.js";
 import { wireSidebarResize } from "./resize.js";
 
 let searchQuery = "";
 let searchWired = false;
 let railWired = false;
+let pointerInside = false;
+// Latest render requested while an inline rename held the list.
+let heldRender = null;
+
+// In use = the pointer is over the sidebar or focus is inside it. Recent
+// holds still for that long so rows never move under the cursor.
+function sidebarInUse() {
+  return pointerInside || Boolean(el.sidebar?.contains(document.activeElement));
+}
+
+// The user is done with the sidebar: repaint once if Recent fell behind.
+function releaseRecent() {
+  if (sidebarInUse() || searchQuery.trim()) return;
+  if (projects.recentIsStale(state.sessions || [])) emit("sidebar:rerender");
+}
 
 // Next midnight boundary, for main.js bucket-rollover scheduling. Moved
 // verbatim from the retired sidebar/activity.js (Recent view).
@@ -20,26 +35,62 @@ export function nextActivityBoundaryAt(now) {
 }
 
 export function renderKey(sessions) {
-  // Every section now sorts by a stable key, so a session's `lastActivity`
-  // bumping no longer changes row order — leaving it in the key only forced
-  // repaints that yank rows out from under a tap.
+  // Folder and status sections sort by a stable key, so a session's raw
+  // `lastActivity` stays out of the key: it only forced repaints that yank
+  // rows out from under a tap.
   const painted = sessions
     .map(rowProjection)
     .sort((a, b) => String(a.id).localeCompare(String(b.id)));
-  return JSON.stringify([painted, state.restorable, state.selectedGhost]);
+  // Recent is the one activity-ordered section; its painted ids (frozen while
+  // the sidebar is in use) join the key so a reorder repaints once released.
+  const recent = searchQuery.trim() ? null : projects.recentKey(sessions, sidebarInUse());
+  return JSON.stringify([painted, recent, state.restorable, state.selectedGhost]);
 }
 
 // Renders whichever view is active. Exposed for main.js polling.
 export function render(sessions, { onOpen } = {}) {
+  // An open inline rename lives inside a row; rebuilding the list would throw
+  // the edit away mid-word. Hold the latest request and replay it on close.
+  if (renameActive()) {
+    heldRender = [sessions, { onOpen }];
+    return;
+  }
+  heldRender = null;
   const host = el["session-list"];
+  const focus = focusedControl(host);
   if (searchQuery.trim()) {
     projects.renderSearch(host, sessions, { onOpen, query: searchQuery, ghosts: state.restorable });
   } else {
-    projects.render(host, sessions, { onOpen, ghosts: state.restorable });
+    projects.render(host, sessions, { onOpen, ghosts: state.restorable, freezeRecent: sidebarInUse() });
   }
+  restoreFocus(host, focus);
   // Every render reinserts rows, which restarts the entrance animation. Retire
   // it after the first paint so a status change never replays the stagger.
   host.classList.add("settled");
+}
+
+// Every render replaces the rows, which drops keyboard focus to <body> and
+// strands a rail user after a folder toggle. The focused control is found
+// again in the new DOM by row identity plus control class; a session can be
+// listed twice (Recent and its folder), so the match keeps its ordinal.
+const RAIL_CONTROLS = ["sess-open", "row-pin", "row-menu", "ghost-restore", "folder-collapse", "folder-select", "restore-all"];
+function focusedControl(host) {
+  const button = document.activeElement?.closest?.("button");
+  if (!button || !host.contains(button)) return null;
+  const control = RAIL_CONTROLS.find((name) => button.classList.contains(name));
+  if (!control) return null;
+  const row = button.closest("li.sess");
+  const group = button.closest("[data-project-key]");
+  const scope = row
+    ? `li.sess[data-session-id="${CSS.escape(row.dataset.sessionId)}"] > `
+    : group ? `[data-project-key="${CSS.escape(group.dataset.projectKey)}"] > .folder-head > ` : "";
+  const selector = `${scope}button.${control}`;
+  return { selector, nth: [...host.querySelectorAll(selector)].indexOf(button) };
+}
+function restoreFocus(host, target) {
+  if (!target || host.contains(document.activeElement)) return;
+  const matches = host.querySelectorAll(target.selector);
+  (matches[target.nth] || matches[0])?.focus();
 }
 
 // Wires search and the text view tabs once.
@@ -88,6 +139,22 @@ export function init() {
   if (list && !railWired) {
     railWired = true;
     list.addEventListener("keydown", onRailKeydown);
+    onRenameEnd(() => {
+      if (heldRender) render(...heldRender);
+    });
+    const side = el.sidebar;
+    if (side) {
+      side.addEventListener("pointerenter", () => { pointerInside = true; });
+      // Touch pointers leave right after lifting, so a tap only holds Recent
+      // for the tap itself.
+      side.addEventListener("pointerleave", () => {
+        pointerInside = false;
+        releaseRecent();
+      });
+      // focusout fires before the next element takes focus; wait a task so
+      // moving between rail controls does not count as leaving.
+      side.addEventListener("focusout", () => setTimeout(releaseRecent, 0));
+    }
   }
 
   // The Projects/Recent tabs are retired: one ranked list serves both jobs, so

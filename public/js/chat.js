@@ -50,8 +50,13 @@ let pendingRestore = false;
 const localUserItems = new Map();
 // Latest user text per session, from sends and polled transcript echoes alike.
 // regenerateLast resends it as a new turn after a session error, once the
-// optimistic record has already been reconciled away.
+// optimistic record has already been reconciled away. Only full text is ever
+// stored: the server echo is cut at a display bound, and resending that cut
+// would silently send a different message.
 const lastUserTextBySession = new Map();
+// The last full text this tab sent, keyed by session with its full-text hash,
+// so a truncated echo of that same send can still be resent or edited.
+const lastSentBySession = new Map();
 
 function recordItem(record) {
   return {
@@ -242,7 +247,10 @@ export function resetChat({ discardPrevious = true } = {}) {
   pendingRestore = false;
   setChatLoading(false);
   if (previousId && discardPrevious) clearLocalSession(previousId);
-  if (previousId && discardPrevious) lastUserTextBySession.delete(previousId);
+  if (previousId && discardPrevious) {
+    lastUserTextBySession.delete(previousId);
+    lastSentBySession.delete(previousId);
+  }
   clearLog();
   renderPanels(null);
   syncActivityNode();
@@ -313,6 +321,7 @@ export async function sendChat(text) {
   }
 
   lastUserTextBySession.set(id, text);
+  lastSentBySession.set(id, { text, textHash: record.textHash });
   return attemptSend(record);
 }
 
@@ -351,8 +360,8 @@ export async function interruptChat() {
   if (!sessionId) return;
   const id = sessionId;
   const generation = pollGeneration;
-  // Optimistic pending also covers direct callers (e.g. the Retry card's
-  // retryInterrupt); the composer click already entered it, idempotently.
+  // Optimistic pending also covers direct callers (e.g. the error card's
+  // chat:retryInterrupt); the composer click already entered it, idempotently.
   beginInterruptRequest();
   try {
     await api(`/sessions/${encodeURIComponent(id)}/chat/keys`, {
@@ -375,9 +384,7 @@ export async function interruptChat() {
   }
 }
 
-// Resumption paths for transcript error cards (shared with slice C, which
-// reuses these; the builder reaches them via window so no new emit/get names
-// are needed and check:events stays balanced).
+// Resumption paths for transcript error cards and the Regenerate action.
 export function retryPollTurn(cardSessionId) {
   if (!sessionId || (cardSessionId && cardSessionId !== sessionId)) return false;
   // Drop the backoff so the next attempt goes out immediately; a successful
@@ -399,12 +406,6 @@ export async function regenerateLast(cardSessionId) {
   const text = lastUserTextBySession.get(target);
   if (!text) return false;
   return sendChat(text);
-}
-
-if (typeof window !== "undefined") {
-  window.retryPollTurn = retryPollTurn;
-  window.retryInterrupt = retryInterrupt;
-  window.regenerateLast = regenerateLast;
 }
 
 // ---- Poll loop ------------------------------------------------------------
@@ -495,10 +496,18 @@ async function doPoll(generation) {
     for (const item of batch || []) {
       if (!item || typeof item !== "object") continue;
       if (item.kind === "user" && typeof item.text === "string" && item.text) {
-        lastUserTextBySession.set(id, item.text);
+        if (item.truncated) {
+          const sent = lastSentBySession.get(id);
+          if (sent && sent.textHash && sent.textHash === item.textHash) item.fullText = sent.text;
+        }
+        const full = item.truncated ? item.fullText : item.text;
+        // An unknown truncated echo is still the newest turn, so the older
+        // full text must not stand in for it.
+        if (full) lastUserTextBySession.set(id, full);
+        else lastUserTextBySession.delete(id);
       } else if (item.kind === "error" && !item.action) {
-        // Server session errors carry no resumption path; the card retries by
-        // resending the last user text as a new turn.
+        // Server session errors carry no resumption path; the transcript offers
+        // a regenerate Retry only while the error is the newest reply.
         item.action = { action: "regenerate", sessionId: id };
       }
     }

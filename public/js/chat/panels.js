@@ -168,7 +168,7 @@ function renderStatus(derived) {
   // every row shares, so the rail shows the workspace-relative part with the
   // real path in the tooltip.
   if (cwd) {
-    parts.push(elem("span", { class: "cs-item cs-cwd cs-secondary", title: cwd }, workspaceRelative(cwd)));
+    parts.push(elem("span", { class: "cs-item cs-cwd", title: cwd }, workspaceRelative(cwd)));
   }
   // Git reads as one coupled unit — branch icon, branch, dirty count tight
   // together — never loose text drifting in the middle of the composer.
@@ -178,7 +178,7 @@ function renderStatus(derived) {
     if (git.dirty) unit.push(elem("span", { class: "cs-git-detail" }, `${git.dirty} dirty`));
     if (git.ahead) unit.push(elem("span", { class: "cs-git-detail" }, `↑${git.ahead}`));
     if (git.behind) unit.push(elem("span", { class: "cs-git-detail" }, `↓${git.behind}`));
-    parts.push(elem("span", { class: "cs-item cs-git cs-secondary", title, "aria-label": title }, ...unit));
+    parts.push(elem("span", { class: "cs-item cs-git", title, "aria-label": title }, ...unit));
   }
 
   // A null percent means the transcript did not expose a context window, so a
@@ -190,18 +190,18 @@ function renderStatus(derived) {
     const bar = elem("span", { class: `cs-ctx-bar${pct >= 80 ? " cs-ctx-warn" : ""}` }, fill);
     const label = elem("span", { class: "cs-ctx-pct" });
     label.textContent = `${pct}%`;
-    parts.push(elem("span", { class: "cs-item cs-ctx cs-secondary" }, bar, label));
+    parts.push(elem("span", { class: "cs-item cs-ctx" }, bar, label));
   } else if (context && typeof context.totalTokens === "number") {
     const label = elem("span", { class: "cs-ctx-pct" });
     label.textContent = `${Math.round(context.totalTokens / 1000)}K tokens`;
-    parts.push(elem("span", { class: "cs-item cs-ctx cs-secondary" }, label));
+    parts.push(elem("span", { class: "cs-item cs-ctx" }, label));
   }
 
   // Spend is the one number the TUI status line carries that Chat did not, and
   // it is the one an operator running many sessions actually watches.
   if (typeof spend === "number" && spend > 0) {
     const shown = spend >= 0.01 ? `$${spend.toFixed(2)}` : "<$0.01";
-    parts.push(elem("span", { class: "cs-item cs-spend cs-secondary", title: "Session spend" }, shown));
+    parts.push(elem("span", { class: "cs-item cs-spend", title: "Session spend" }, shown));
   }
 
   if (!parts.length) { hide(node); return; }

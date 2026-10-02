@@ -473,7 +473,10 @@ async function restorable() {
   for (const entry of Object.values(entries)) {
     if (liveIds.has(entry.id)) continue;
     const transcript = resolveTranscript(entry.id, entry.profile);
-    const title = (transcript && readTranscriptTitle(transcript)) || entry.title || entry.id;
+    // A manual rename outranks omp's transcript auto-title, here as in the
+    // live row, so a not-running row keeps the name the user gave it.
+    const title = (entry.titleLocked && entry.title)
+      || (transcript && readTranscriptTitle(transcript)) || entry.title || entry.id;
     const ownedMtime = fileMtime(newestOwnedJsonl(entry.id));
     const createdMs = Number(entry.created) || 0;
     ghosts.push({
@@ -779,7 +782,9 @@ async function renameTitle(id, title) {
   if (typeof id !== "string" || !SESSION_ID.test(id)) {
     throw sessionError("EBADID", "invalid session id");
   }
-  const trimmed = typeof title === "string" ? title.trim() : "";
+  // tmux prints user options raw and list output is split on tab/newline,
+  // so a control character would shift every later field of this row.
+  const trimmed = typeof title === "string" ? title.replace(/[\u0000-\u001f\u007f]+/g, " ").trim() : "";
   if (!trimmed) {
     throw sessionError("EBADTITLE", "title is required");
   }
@@ -789,9 +794,11 @@ async function renameTitle(id, title) {
   const live = await get(id);
   if (!live) throw sessionError("ENOSESSION", "session not found");
   const target = tmuxPane(id);
-  requireResult(await tmux(["set-option", "-t", target, "@omp_title", trimmed]));
+  // Lock before title: a concurrent list() that sees the new title must also
+  // see the lock, or its transcript sync would overwrite the rename.
   requireResult(await tmux(["set-option", "-t", target, "@omp_title_lock", "1"]));
   requireResult(await tmux(["set-option", "-t", target, "@omp_notitle", "1"]));
+  requireResult(await tmux(["set-option", "-t", target, "@omp_title", trimmed]));
   rememberSession({
     id,
     folder: live.folder,
@@ -974,7 +981,10 @@ async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
   if (noTitle === true) {
     requireResult(await tmux(["set-option", "-t", target, "@omp_notitle", "1"]));
   } else if (noTitle === false) {
+    // Opting back into auto-titles also releases a manual rename's lock;
+    // otherwise the transcript title could never replace it again.
     await tmux(["set-option", "-t", target, "-u", "@omp_notitle"]);
+    await tmux(["set-option", "-t", target, "-u", "@omp_title_lock"]);
   }
   await tmux(["set-option", "-t", target, "-u", "@omp_transcript"]);
   // The transcript names the model only once the new runtime's first reply
@@ -993,7 +1003,7 @@ async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
     created: Number(s.created) || Date.now(),
     pinned: Boolean(s.pinned),
     notitle: noTitle === true || (noTitle !== false && s.notitle === true),
-    titleLocked: s.titleLocked === true,
+    titleLocked: noTitle !== false && s.titleLocked === true,
   });
 
   return get(id);

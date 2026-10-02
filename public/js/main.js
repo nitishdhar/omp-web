@@ -642,6 +642,9 @@ get("chat:startSession", ({ text }) => startSessionWithMessage(text));
 get("chat:interrupt", () => chat.interruptChat());
 get("chat:retry", (p) => chat.retryChat(p.id));
 get("chat:edit", (p) => chat.editChat(p.id));
+get("chat:regenerate", (p) => chat.regenerateLast(p?.sessionId));
+get("chat:retryPoll", (p) => chat.retryPollTurn(p?.sessionId));
+get("chat:retryInterrupt", (p) => chat.retryInterrupt(p?.sessionId));
 get("file:open", ({ path }) => openFileViewer({ sessionId: state.current, path }));
 get("auth:required", () => {
   if (el.authgate.hidden) showAuth("Your token is no longer accepted. Unlock to reconnect.");

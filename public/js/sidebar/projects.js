@@ -7,7 +7,8 @@ import { icon } from "../icons.js";
 import * as menu from "./menu.js";
 import { sessionRow, ghostRow, sessionPeeksUnread, startInlineRename } from "./rows.js";
 import { copyWithNotice } from "../notice.js";
-import { score } from "../palette.js";
+import { score } from "../match.js";
+import { workspaceRelative } from "../paths.js";
 import { sessionStatus } from "../session-status.js";
 
 const collapsedProjects = new Set();
@@ -106,7 +107,7 @@ function stableCreatedOrder(a, b) {
     || String(a.id).localeCompare(String(b.id));
 }
 
-// Sidebar search: free terms fuzzy-match through the palette's subsequence
+// Sidebar search: free terms fuzzy-match through the shared subsequence
 // scorer — one matcher for the whole app — plus explicit filters
 // status:working|waiting|idle|done, is:pinned, type:agent|shell (agent is
 // anything but a shell). Every term must hit some field.
@@ -142,7 +143,9 @@ function sessionMatches(session, filters) {
   if (filters.pinnedOnly && !session.pinned) return false;
   if (filters.type === "shell" && session.type !== "shell") return false;
   if (filters.type === "agent" && session.type === "shell") return false;
-  const fields = [session.title, session.folder, session.profile, session.type, session.id];
+  // The folder scores workspace-relative: every absolute path shares the
+  // workspace prefix, so short queries matched every session through it.
+  const fields = [session.title, workspaceRelative(session.folder), session.profile, session.type, session.id];
   return filters.terms.every((term) => fields.some((field) => fieldMatches(field, term)));
 }
 
@@ -371,7 +374,44 @@ export function renderSearch(host, sessions, { onOpen, query, ghosts = [] } = {}
   }
 }
 
-export function render(host, sessions, { onOpen, ghosts = [] } = {}) {
+// Recent: the last handful of sessions actually touched, newest first.
+// Folders sort by creation (stable, per the rail's ordering rule), so without
+// this, work from yesterday sinks into collapsed folders and reads as lost
+// unless pinned. Recent is a shortcut, not a home: its rows stay in their
+// folders too. lastActivity bumps on every attach, so a live ranking would
+// reorder Recent the moment a row is clicked; while the sidebar is in use the
+// painted membership and order hold (gone sessions drop out, nothing joins or
+// moves) and index.js re-renders once the user is done.
+let paintedRecent = null;
+// Same rule the Needs/Working/Pinned sections hoist by: those rows already
+// sit at the top, so Recent spends its five slots elsewhere.
+function hoisted(session) {
+  return session.pinned
+    || (session.type !== "shell" && (session.status === "waiting" || session.status === "working"));
+}
+function freshRecent(sessions) {
+  return sessions
+    .filter((s) => !hoisted(s) && Number(s.lastActivity) > 0)
+    .sort((a, b) => (Number(b.lastActivity) || 0) - (Number(a.lastActivity) || 0) || stableCreatedOrder(a, b))
+    .slice(0, 5);
+}
+function recentSessions(sessions, frozen) {
+  if (!frozen || !paintedRecent) return freshRecent(sessions);
+  const byId = new Map(sessions.map((s) => [s.id, s]));
+  return paintedRecent.map((id) => byId.get(id)).filter(Boolean);
+}
+// The Recent ids a render would paint now; part of the poll render gate so a
+// reorder repaints once the freeze lifts, and stays put while it holds.
+export function recentKey(sessions, frozen) {
+  return recentSessions(sessions, frozen).map((s) => s.id);
+}
+// Whether lifting the freeze would change what Recent shows.
+export function recentIsStale(sessions) {
+  return paintedRecent !== null
+    && freshRecent(sessions).map((s) => s.id).join("\n") !== paintedRecent.join("\n");
+}
+
+export function render(host, sessions, { onOpen, ghosts = [], freezeRecent = false } = {}) {
   menu.close({ restoreFocus: false });
   const folders = buildFolders(sessions, ghosts);
   syncDefaultCollapse(folders, sessions);
@@ -399,25 +439,20 @@ export function render(host, sessions, { onOpen, ghosts = [] } = {}) {
   const pinnedSection = sessionSection("Pinned", "pinned-section", pinned, onOpen);
   if (pinnedSection) host.append(pinnedSection);
   for (const session of pinned) sidelined.add(session.id);
-  // Recent: the last handful of sessions actually touched, newest first.
-  // Folders sort by creation (stable, per the rail's ordering rule), so
-  // without this, work from yesterday sinks into collapsed folders and reads
-  // as lost unless pinned. Hoisted and deduped like the sections above.
-  const recent = sessions
-    .filter((s) => !sidelined.has(s.id) && Number(s.lastActivity) > 0)
-    .sort((a, b) => (Number(b.lastActivity) || 0) - (Number(a.lastActivity) || 0) || stableCreatedOrder(a, b))
-    .slice(0, 5);
+  // Recent rows are not sidelined: see recentSessions for why and for the freeze.
+  const recent = recentSessions(sessions, freezeRecent);
+  paintedRecent = recent.map((s) => s.id);
   const recentSection = sessionSection("Recent", "recent-section", recent, onOpen);
   if (recentSection) host.append(recentSection);
-  for (const session of recent) sidelined.add(session.id);
 
   // Every workspace folder is listed, not only the ones with a live session:
   // the sidebar is also where you pick a project to start in, and folders
   // vanishing as their last session ended read as data loss.
   for (const folder of folders) {
-    // One session, one place: waiting/working/pinned hoist into their ranked
-    // sections above and do not duplicate into folders. A pinned row lives
-    // under Pinned; its folder is where it returns when unpinned.
+    // One session, one place for the status/pin sections: waiting/working/
+    // pinned hoist into their ranked sections above and do not duplicate into
+    // folders. A pinned row lives under Pinned; its folder is where it returns
+    // when unpinned. Recent is the exception and leaves rows in place.
     const rows = folder.sessions
       .filter((session) => !sidelined.has(session.id))
       .sort(stableCreatedOrder);

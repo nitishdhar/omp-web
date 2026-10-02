@@ -7,32 +7,12 @@
 import { el, elem } from "./dom.js";
 import { emit, state } from "./state.js";
 import { workspaceRelative } from "./paths.js";
+import { score } from "./match.js";
 
 const MAX_RESULTS = 12;
 let open = false;
 let active = 0;
 let entries = [];
-
-// Subsequence match, not substring: "owm" finds "Omp Web Main" the way a
-// terminal user expects, and the score prefers earlier, tighter runs.
-export function score(haystack, needle) {
-  if (!needle) return 0;
-  const hay = haystack.toLowerCase();
-  const term = needle.toLowerCase();
-  let index = 0;
-  let first = -1;
-  let gaps = 0;
-  let last = -1;
-  for (const ch of term) {
-    index = hay.indexOf(ch, index);
-    if (index === -1) return null;
-    if (first === -1) first = index;
-    if (last !== -1 && index > last + 1) gaps += index - last - 1;
-    last = index;
-    index += 1;
-  }
-  return first + gaps;
-}
 
 function sessionEntries() {
   return (state.sessions || []).map((session) => ({

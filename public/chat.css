@@ -291,16 +291,6 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
   display: flex; align-items: center; flex-wrap: wrap; gap: 7px; min-height: 38px; padding: 7px 10px;
   list-style: none; cursor: pointer; user-select: none; font-size: 12.5px;
 }
-.chat-turn-receipt {
-  display: inline-flex; align-items: center; flex: 0 1 46%; flex-wrap: nowrap; gap: 4px;
-  min-width: 0; overflow: hidden;
-}
-.chat-receipt-file {
-  max-width: 160px; padding: 1px 6px; overflow: hidden; border-radius: 999px;
-  background: var(--row-hover); color: var(--muted);
-  font: 10.5px var(--font-mono); text-overflow: ellipsis; white-space: nowrap;
-}
-.chat-receipt-more { color: var(--faint); font: 10.5px var(--font-ui); }
 .chat-tool-group-summary::-webkit-details-marker, .chat-tool-summary::-webkit-details-marker { display: none; }
 .chat-tool-group-summary::after {
   content: "›"; flex: none; margin-left: auto; color: var(--faint); transition: transform .12s ease;
@@ -601,10 +591,6 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
   .chat-compose-shell { padding: 8px 10px; }
   .chat-composer { width: 100%; min-height: 58px; padding: 6px; gap: 4px; }
   #chat-input { min-height: 44px; padding-inline: 6px; font-size: 16px; }
-  /* Tool mix and failure state carry the live signal on narrow screens.
-     Changed files remain inside the expanded calls instead of squeezing the
-     collapsed row into vertical single-character chips. */
-  .chat-tool-group-summary .chat-turn-receipt { display: none; }
   #chat-advisor { padding: 9px 11px; }
   #chat-ask { max-height: min(32dvh, 240px); padding: 12px; }
   .chat-runtime { gap: 6px; }

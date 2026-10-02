@@ -29,16 +29,33 @@ const openToolIds = new Set();
 const visibleTimeIds = new Set();
 const expandedUserIds = new Set();
 
-// Regenerate replays the last user input, so only the latest assistant turn
-// offers it; older replies keep history read-only instead of forking it.
-let lastAssistantId = null;
+// Regenerate and a session error's Retry both replay the newest user input, so
+// only the reply that follows it (assistant turn or session error) offers
+// them; older replies keep history read-only instead of resending the wrong
+// message.
+let replyTailId = null;
 
-function tailAssistantId() {
+function tailReplyId() {
   for (let index = timeline.length - 1; index >= 0; index--) {
     const item = itemData.get(timeline[index]);
-    if (item && item.kind === "assistant") return item.id;
+    if (!item) continue;
+    if (item.kind === "user") return null;
+    if (item.kind === "assistant") return item.id;
+    if (item.kind === "error" && errorRetryKind(item) === "regenerate") return item.id;
   }
   return null;
+}
+
+// Rendered nodes are cached and reused across window syncs, so a moved tail
+// must rebuild both the reply losing the action and the one gaining it.
+function refreshReplyTail() {
+  const previous = replyTailId;
+  replyTailId = tailReplyId();
+  if (previous === replyTailId) return;
+  for (const id of [previous, replyTailId]) {
+    const item = id && itemData.get(id);
+    if (item) replaceRenderedItem(item);
+  }
 }
 let currentToolGroup = null;
 let groupSequence = 0;
@@ -264,9 +281,11 @@ function messageActions(item, text) {
   }
 
   // A delivered user turn is resendable as a new turn through the composer;
-  // pending and failed messages keep their own inline Retry/Edit instead.
+  // pending and failed messages keep their own inline Retry/Edit instead. A
+  // truncated echo is editable only when this tab still holds its full text.
   if (item.kind === "user" && !item.pending && !item.failed
-    && typeof item.text === "string" && item.text) {
+    && typeof item.text === "string" && item.text
+    && (!item.truncated || item.fullText)) {
     const edit = elem("button", {
       class: "ghost chat-action-btn",
       type: "button",
@@ -1011,20 +1030,14 @@ function buildAssistant(item) {
     body.append(elem("span", { class: "chat-message-truncated chat-chip chat-chip-trunc" }, "Truncated preview"));
   }
   const actions = messageActions(item, item.text || "");
-  if (item.id === lastAssistantId) {
-    // The shared resumption path replays the last user input as a new turn;
-    // the transcript reaches it directly so no new event names are needed.
+  if (item.id === replyTailId) {
     const regenerate = elem("button", {
       class: "ghost chat-action-btn",
       type: "button",
       title: "Regenerate reply from the last message",
       "aria-label": "Regenerate reply from the last message",
     }, "Regenerate");
-    regenerate.addEventListener("click", () => {
-      if (typeof window !== "undefined" && typeof window.regenerateLast === "function") {
-        window.regenerateLast();
-      }
-    });
+    regenerate.addEventListener("click", () => emit("chat:regenerate", {}));
     actions.append(regenerate);
   }
   body.append(actions);
@@ -1325,9 +1338,10 @@ function buildNotice(item) {
   );
 }
 
-// Error cards always offer a resumption path. The descriptor rides along as an
-// optional `action` so old payloads without one still resolve: well-known ids
-// fall back to their retry kind, anything else regenerates the last turn.
+// Poll and interrupt errors always offer their resumption path. The descriptor
+// rides along as an optional `action` so old payloads without one still
+// resolve: well-known ids fall back to their retry kind, anything else
+// regenerates the last turn, which only the newest reply may offer.
 function errorRetryKind(item) {
   const name = item && item.action && item.action.action;
   if (name === "retry-poll" || name === "retry-interrupt" || name === "regenerate") return name;
@@ -1342,16 +1356,15 @@ function buildError(item) {
     elem("div", { class: "chat-error-text" }, item.text || "The session could not continue."),
   );
   if (item.truncated) node.append(elem("span", { class: "chat-message-truncated chat-chip chat-chip-trunc" }, "Truncated preview"));
-  // Direct window calls keep this working without new emit/get names, which
-  // would unbalance the check:events contract main.js relies on.
+  const kind = errorRetryKind(item);
+  if (kind === "regenerate" && item.id !== replyTailId) return node;
   const retry = elem("button", { class: "ghost chat-action-btn chat-error-retry", type: "button" }, "Retry");
   retry.setAttribute("aria-label", "Retry");
   retry.addEventListener("click", () => {
-    const sessionId = item && item.action && item.action.sessionId;
-    const kind = errorRetryKind(item);
-    if (kind === "retry-poll") window.retryPollTurn?.(sessionId);
-    else if (kind === "retry-interrupt") window.retryInterrupt?.(sessionId);
-    else window.regenerateLast?.(sessionId);
+    const payload = { sessionId: item.action && item.action.sessionId };
+    if (kind === "retry-poll") emit("chat:retryPoll", payload);
+    else if (kind === "retry-interrupt") emit("chat:retryInterrupt", payload);
+    else emit("chat:regenerate", payload);
   });
   node.append(elem("div", {
     class: "chat-error-actions",
@@ -1544,11 +1557,13 @@ export function syncActivityNode() {
 
 // Delivered user text for edit-and-resend: the composer owns the draft, so
 // chat.js resolves the text here while the original turn stays untouched (a
-// resend is a new turn, never a rewrite).
+// resend is a new turn, never a rewrite). A truncated echo resolves only to
+// full text chat.js attached; its display cut is never a valid resend.
 export function deliveredUserText(id) {
   const item = itemData.get(id);
   if (!item || item.kind !== "user" || item.pending || item.failed) return "";
-  return typeof item.text === "string" ? item.text : "";
+  const text = item.truncated ? item.fullText : item.text;
+  return typeof text === "string" ? text : "";
 }
 
 export function upsertItems(items) {
@@ -1595,7 +1610,7 @@ export function upsertItems(items) {
       insertTimeline(item.id, item.at);
     }
   }
-  if (structuralChange) lastAssistantId = tailAssistantId();
+  if (structuralChange) refreshReplyTail();
   if (followTail) windowStart = tailStart();
   if (structuralChange) syncRenderedWindow(container);
   if (followTail) scrollToTail(container, false);
@@ -1633,9 +1648,9 @@ export function removeItem(id) {
   visibleTimeIds.delete(id);
   expandedUserIds.delete(id);
   itemData.delete(id);
-  // A removed assistant may have owned the Regenerate affordance; the sync
-  // below rebuilds the tail, so refresh which turn it points at first.
-  lastAssistantId = tailAssistantId();
+  // A removed reply may have owned the Regenerate/Retry affordance; the window
+  // sync below reuses cached nodes, so the new tail must be rebuilt first.
+  refreshReplyTail();
   if (container) {
     if (followTail) windowStart = tailStart();
     syncRenderedWindow(container);
@@ -1655,7 +1670,7 @@ export function clearLog() {
   openToolIds.clear();
   visibleTimeIds.clear();
   expandedUserIds.clear();
-  lastAssistantId = null;
+  replyTailId = null;
   currentToolGroup = null;
   groupSequence = 0;
   windowStart = 0;
