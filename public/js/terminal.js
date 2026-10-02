@@ -18,7 +18,8 @@ const MAX_OUTPUT_BATCH_BYTES = 64 * 1024;
 
 // Global mode + shared chrome timers. Everything else lives on pool entries.
 let terminalVisible = true;
-let scrollStatusTimer, scrubFeedbackTimer, scheduleFrame = 0;
+let scrollStatusTimer, scrubFeedbackTimer, fitSettleTimer = 0;
+let fitSettleForce = false;
 let wired = false;
 const intentionalSockets = new WeakSet();
 const failedSockets = new WeakSet();
@@ -82,7 +83,7 @@ function ensureGlobalWiring() {
     // Active entry only: each pooled socket is its own tmux attach client and
     // the server uses window-size latest, so a background resize would reflow
     // sessions the user isn't viewing. Entries fit on activation instead.
-    doFit({ force: true });
+    scheduleFit({ force: true });
   });
 }
 
@@ -222,12 +223,23 @@ function wireCompactFocusGuardFor(entry) {
   syncCompactFocusGuard();
 }
 
-function scheduleFit() {
-  if (scheduleFrame) return;
-  scheduleFrame = requestAnimationFrame(() => {
-    scheduleFrame = 0;
-    doFit();
-  });
+// Every size tmux sees makes OMP clear the screen and rewrite its whole
+// transcript (hundreds of KiB on a long session), height-only changes
+// included. Layout changes arrive once per frame for their whole duration
+// (180ms sidebar collapse, column drag, window drag, mobile keyboard), so fit
+// once after they settle instead of once per frame. Direct fits on attach,
+// reconnect, and mode switch stay immediate.
+const FIT_SETTLE_MS = 160;
+
+function scheduleFit({ force = false } = {}) {
+  fitSettleForce ||= force;
+  clearTimeout(fitSettleTimer);
+  fitSettleTimer = setTimeout(() => {
+    const settledForce = fitSettleForce;
+    fitSettleTimer = 0;
+    fitSettleForce = false;
+    doFit({ force: settledForce });
+  }, FIT_SETTLE_MS);
 }
 
 export function setVisible(visible) {
