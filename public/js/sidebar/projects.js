@@ -4,7 +4,7 @@
 import { state, emit } from "../state.js";
 import { elem } from "../dom.js";
 import { icon } from "../icons.js";
-import * as menu from "./menu.js";
+import * as menu from "../menu.js";
 import { sessionRow, ghostRow, sessionPeeksUnread, startInlineRename } from "./rows.js";
 import { copyWithNotice } from "../notice.js";
 import { score } from "../match.js";

@@ -317,6 +317,21 @@ async function renameSession(id, title) {
   } catch (e) { showNotice("Rename failed: " + e.message, { tone: "error" }); }
 }
 
+// The chat run row emits the choice; the switch is OMP's own /switch, typed
+// into the session by the backend after it validates against the profile's
+// catalog. The transcript's model_change shows up on the next chat poll.
+async function switchSessionModel({ id, model, effort }) {
+  try {
+    const result = await api(`/sessions/${encodeURIComponent(id)}/model`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ model, effort: effort || null }),
+    });
+    const name = String(result.model || model).split("/").pop();
+    showNotice(`Switched to ${name}${result.effort ? ` · ${result.effort} effort` : ""}`);
+  } catch (e) { showNotice("Switch failed: " + e.message, { tone: "error" }); }
+}
+
 function onAttachUi(session) {
   openSession(session);
   refresh();
@@ -612,6 +627,7 @@ get("session:open", (id) => {
   if (session) openSession(session);
 });
 get("session:reloadRequest", (id) => modals.openReloadModal(id, state.sessions));
+get("session:switchModel", (choice) => switchSessionModel(choice));
 get("session:newInFolder", (folder) => modals.openModal(folder));
 get("session:restore", ({ ids, folder }) => restoreSessions(ids, { folder }));
 get("session:forget", (id) => forgetGhost(id));

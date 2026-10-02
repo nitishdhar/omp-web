@@ -60,6 +60,7 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | `api/routes.js` | REST route table. Session create/list/scroll/profile-reload/pin/delete operations use shared bounded request/error handling; `/api/meta` projects native profile names plus bounded, identifier-validated `modelRoles` provider/model/effort metadata; chat routes and session attachments delegate to their owning modules. |
 | `api/util.js` | Shared JSON response/error mapping and a 1 MB, strict-UTF-8 request-body reader. API responses are `no-store`. |
 | `api/usage.js` | One-minute native `omp usage --json --redact` adapter. It aggregates configured profiles, deduplicates accounts by allowlisted usage fields, and strips account/credential metadata before returning dynamic provider limit data to the browser. |
+| `api/models.js` | Per-profile chat model catalog from native `omp models --json` (selector, name, supported thinking levels; 10-minute cache, `GET /api/profiles/:name/models`) and the in-session switch (`POST /api/sessions/:id/model {model, effort}`). The switch validates both values against the session's profile catalog, then types OMP's own `/switch <selector>[:<level>]` through `sendText` (same guard, queue, and composer clear as a Chat send). OMP changes the live model and thinking level for that session only and records `model_change` (role `temporary`) and, when the level changed, `thinking_level_change`; no model request is made. A catalog failure is `503 EMODELSUNAVAILABLE`. |
 | `api/transcribe.js` | Voice-input transcription proxy. Accepts a short browser-recorded clip and forwards it to the configured OpenAI-compatible `/audio/transcriptions` endpoint; the provider key lives only in server config and never reaches the browser, and audio is held in memory, never written to disk. |
 | `api/attachments.js` | Bounded, authenticated image/document upload parser; validates allowed types and stores private per-session attachments outside workspaces. |
 | `api/file-preview.js` | Authenticated raw file preview endpoint: opens the resolved file with `O_NOFOLLOW`, re-checks containment on the **opened descriptor's** path (no check/open race), applies the viewer-folder credential filter, and streams only regular allowlisted files up to 10 MiB. |
@@ -86,7 +87,7 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | `public/js/quickkeys.js` | Quick-key toolbar plus the mobile Terminal composer: session-owned input drafts, attachment insertion, shared-controller dictation, Return submission, deferred-input settlement, and retry state. |
 | `public/js/chat.js` | Chat poll/cursor lifecycle, reload epoch invalidation, adaptive active-turn refresh, and per-session optimistic sends. Failed or delivery-unknown messages remain visible with explicit **Retry** and **Edit**; authoritative echoes reconcile by full-text SHA-256 or, within the same send window, a whitespace-normalized full preview. Idle sessions poll at the normal cadence; live turn activity temporarily tightens refresh latency without introducing a second writer or event channel. |
 | `public/js/chat/` | `transcript.js` (bounded renderer: payloads in memory, one fixed-size DOM window, tool bodies built only when opened), `rail.js` (turn rail drawn from the transcript's full timeline; transcript.js owns the jump), `composer.js` (wires `#chat-input`/`#chat-send`/`#chat-interrupt`, emits intent events only), `panels.js` (derived-state workflow inspector + composer dock, re-rendered every poll cycle), `hash.js` (SHA-256 for optimistic-echo reconciliation). A centered safe-Markdown transcript, a 240-entry DOM history window with 200-entry paging, lazy nested tool details, compact visible tool-name/count receipts, message actions, a **Jump to now** control, a persistent current-workflow strip with expandable Todo + active agents, persistent live-intent/runtime metadata, and a composer with session-scoped drafts, voice input, image upload/drop, draft-aware send readiness, and compact-screen transcription that does not summon the software keyboard before the user chooses to edit. |
-| `public/js/sidebar/` | `index.js` (search + one render key + the midnight `nextActivityBoundaryAt` for main.js rollover scheduling), `projects.js` (Needs you / Working / Pinned, folder groups that carry only their remaining sessions, and the collapsed **Not running** section), `resize.js` (persisted desktop column width), `rows.js`, and one shared popover in `menu.js`. The old Recent `activity.js` is deleted; one ranked list serves both jobs. |
+| `public/js/sidebar/` | `index.js` (search + one render key + the midnight `nextActivityBoundaryAt` for main.js rollover scheduling), `projects.js` (Needs you / Working / Pinned, folder groups that carry only their remaining sessions, and the collapsed **Not running** section), `resize.js` (persisted desktop column width), and `rows.js`. Row and folder actions use the app's one popover, `public/js/menu.js`, which the chat run row shares. The old Recent `activity.js` is deleted; one ranked list serves both jobs. |
 | `public/js/notice.js` | The single transient-feedback surface, rendered into `#copy-flash`. Every app-level action (pin, kill, restore, forget, reload, copy path) reports success and failure through it; no `alert()` remains. |
 | `public/js/new-session.js` | Session creation shared by the modal and the landing composer: remembered folder/profile choice, message-derived session name, and the bounded `POST /api/sessions` call. |
 | `public/js/auth.js` | Token capture (URL → localStorage) plus the 401 gate UI. |
@@ -231,6 +232,21 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   model instead, falling back to `<profile> profile` before the first reply;
   the provider sits in that chip's tooltip, and the working directory appears
   only when it differs from the session folder.
+- The run row's model and effort chips are menus (shared `public/js/menu.js`
+  popover). The model menu lists the session profile's chat catalog with the
+  current model checked, then the current model's effort ladder, then
+  **Reload under another profile…** (the existing reload dialog). The effort
+  chip opens the ladder alone. A model choice keeps the current effort when the
+  new model supports it, otherwise OMP applies that model's default. Choices
+  emit `session:switchModel`; `main.js` posts it to `/api/sessions/:id/model`
+  and the transcript's new `model_change` reaches the row on the next poll.
+  Compact layouts hide the effort chip, so effort is changed from the model
+  menu there.
+- `model_change` records `provider/id` while replies record `id` plus a
+  provider field, so the projector splits the selector; otherwise the next
+  reply read as another model change. A `model_change` also keeps the effort
+  in force, because OMP writes `thinking_level_change` after a switch only when
+  the level changed; a model inferred from a reply still clears it.
 - A cold open replays the transcript in byte pages. Those pages are buffered
   and mounted once, already pinned to the tail, instead of painting each page
   and re-pinning; the buffer is bounded to 1.5s so a fast-writing session can

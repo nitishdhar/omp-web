@@ -9,7 +9,7 @@ import { elem } from "../dom.js";
 import { icon } from "../icons.js";
 import { emit, state } from "../state.js";
 import { sessionStatus, statusLabel, statusTitle } from "../session-status.js";
-import * as menu from "./menu.js";
+import * as menu from "../menu.js";
 import { copyWithNotice } from "../notice.js";
 import { workspaceRelative } from "../paths.js";
 

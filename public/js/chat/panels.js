@@ -8,6 +8,7 @@ import { api } from "../api.js";
 import { defaultChoice } from "../new-session.js";
 import { workspaceRelative } from "../paths.js";
 import { icon } from "../icons.js";
+import * as menu from "../menu.js";
 
 // ── Tiny helpers ─────────────────────────────────────────────────────────────
 
@@ -132,6 +133,78 @@ function refreshGitStatus() {
   });
 }
 
+// ── Run controls (model + effort menus) ──────────────────────────────────────
+
+// Each profile's chat catalog, fetched once per page load and shared by every
+// session on that profile. A failed fetch is forgotten so the next open retries.
+const modelCatalogs = new Map();
+function modelCatalog(profile) {
+  if (!modelCatalogs.has(profile)) {
+    const request = api(`/profiles/${encodeURIComponent(profile)}/models`)
+      .then((value) => (Array.isArray(value?.models) ? value.models : []));
+    request.catch(() => modelCatalogs.delete(profile));
+    modelCatalogs.set(profile, request);
+  }
+  return modelCatalogs.get(profile);
+}
+
+// The transcript names a model as `id` with the provider beside it, or as a
+// full `provider/id` selector; the catalog is keyed by selector.
+function catalogEntry(models, model, provider) {
+  if (!model) return null;
+  return models.find((item) => item.selector === model || item.selector === `${provider}/${model}`)
+    || models.find((item) => item.selector.endsWith(`/${model}`))
+    || null;
+}
+
+function modelLabel(item, models) {
+  const twin = models.some((other) => other !== item && other.name === item.name);
+  return twin ? `${item.name} (${item.selector.split("/").pop()})` : item.name;
+}
+
+// Model chip: the profile's models, the current model's effort ladder, and the
+// profile reload dialog for anything else. Effort chip: the ladder alone.
+// Choices are intents; main.js owns the switch.
+async function openRunMenu(anchor, kind, { id, profile, model, provider, effort }) {
+  let models;
+  try {
+    models = await modelCatalog(profile);
+  } catch {
+    // Catalog unavailable: the reload dialog still changes profile/model.
+    if (kind === "model") emit("session:reloadRequest", id);
+    return;
+  }
+  if (state.current !== id || !anchor.isConnected) return;
+  const current = catalogEntry(models, model, provider);
+  const choose = (selector, level) => emit("session:switchModel", { id, model: selector, effort: level });
+  const items = [];
+  if (kind === "model") {
+    for (const item of models) {
+      items.push({
+        label: modelLabel(item, models),
+        checked: item === current,
+        // Keep the effort when the new model offers it; otherwise OMP applies
+        // that model's default.
+        action: () => choose(item.selector, item.levels.includes(effort) ? effort : null),
+      });
+    }
+  }
+  if (current?.levels.length) {
+    if (kind === "model") items.push({ heading: "Effort" });
+    for (const level of current.levels) {
+      items.push({ label: `${level} effort`, checked: level === effort, action: () => choose(current.selector, level) });
+    }
+  }
+  if (kind === "model") {
+    items.push({ heading: "Profile" }, {
+      label: `Reload under another profile…`,
+      action: () => emit("session:reloadRequest", id),
+    });
+  }
+  if (!items.length) return;
+  menu.show(anchor, kind === "model" ? `Model for this session · ${profile}` : "Effort for this session", items);
+}
+
 // ── Status bar (#chat-status) ─────────────────────────────────────────────────
 
 function renderStatus(derived) {
@@ -153,23 +226,31 @@ function renderStatus(derived) {
   // own spans, so dropping a field on a narrow viewport cannot orphan a dot.
   const parts = [];
   const runtime = model || (runProfile ? `${runProfile} profile` : null);
-  // The model chip is the fastest path to "run this under something else":
-  // it opens the existing profile/model reload dialog for the live session.
   // A launch-sourced model is what omp-web started the runtime with; the
   // transcript confirms it when the first reply lands.
   const pending = derived.modelSource === "launch";
   // Provider rides in the tooltip: the model name already implies it, and the
   // run controls read better as a few labelled chips than a row of facts.
   const via = provider ? ` (${provider})` : "";
+  const run = { id: state.current, profile: runProfile || "default", model, provider, effort };
   if (runtime) parts.push(elem("button", {
     class: "cs-item cs-model cs-model-action" + (pending ? " cs-model-pending" : ""),
     type: "button",
+    "aria-haspopup": "menu",
+    "aria-expanded": "false",
     title: pending
-      ? `Launch model${via} — confirmed after the first reply. Click to reload under another profile or model`
-      : `${runtime}${via}. Reload this session under another profile or model`,
-    onclick: () => emit("session:reloadRequest", state.current),
+      ? `Launch model${via}, confirmed after the first reply. Change model or effort`
+      : `${runtime}${via}. Change model or effort`,
+    onclick: (event) => openRunMenu(event.currentTarget, "model", run),
   }, runtime));
-  if (effort) parts.push(elem("span", { class: "cs-item cs-effort" }, `${effort} effort`));
+  if (effort) parts.push(elem("button", {
+    class: "cs-item cs-effort cs-model-action",
+    type: "button",
+    "aria-haspopup": "menu",
+    "aria-expanded": "false",
+    title: "Change effort",
+    onclick: (event) => openRunMenu(event.currentTarget, "effort", run),
+  }, `${effort} effort`));
   // The header breadcrumb names the session's folder; the working directory
   // shows here only when the agent has moved somewhere else.
   if (cwd && cwd !== session?.folder) {

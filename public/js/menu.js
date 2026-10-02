@@ -1,9 +1,9 @@
 "use strict";
-// Hover "…" popover menu. One instance, repositioned per open. Click-outside
-// and Escape close it.
+// The app's one popover menu (sidebar row/folder actions, chat run controls).
+// One instance, repositioned per open. Click-outside and Escape close it.
 
-import { elem } from "../dom.js";
-import { icon } from "../icons.js";
+import { elem } from "./dom.js";
+import { icon } from "./icons.js";
 
 let menuEl = null;
 let opener = null;
@@ -67,9 +67,11 @@ export function close({ restoreFocus = true } = {}) {
   if (restoreFocus && returnTo?.isConnected) returnTo.focus();
 }
 
-// items: [{ label, icon?, danger?, action: fn }]
-// detail: optional [{ label, value }] grid rendered under the title — the
-// session's "what/where/when" card that used to exist only as a hover tooltip.
+// items: [{ label, icon?, danger?, checked?, action: fn } | { heading }]
+// `checked` makes the item a radio choice (the current model or effort);
+// `heading` is an inert section label. detail: optional [{ label, value }]
+// grid rendered under the title — the session's "what/where/when" card that
+// used to exist only as a hover tooltip.
 export function show(anchor, title, items, detail = null) {
   const m = ensure();
   if (open && opener === anchor) {
@@ -91,11 +93,13 @@ export function show(anchor, title, items, detail = null) {
   m.replaceChildren(
     title ? elem("div", { class: "pop-title", text: title }) : "",
     detailNode,
-    ...items.map((item) =>
-      elem("button", {
-        class: "pop-item" + (item.danger ? " danger" : ""),
+    ...items.map((item) => item.heading
+      ? elem("div", { class: "pop-heading", role: "presentation", text: item.heading })
+      : elem("button", {
+        class: "pop-item" + (item.danger ? " danger" : "") + (item.checked ? " is-checked" : ""),
         type: "button",
-        role: "menuitem",
+        role: item.checked === undefined ? "menuitem" : "menuitemradio",
+        "aria-checked": item.checked === undefined ? null : String(Boolean(item.checked)),
         onclick: () => {
           close({ restoreFocus: false });
           item.action();
@@ -111,13 +115,18 @@ export function show(anchor, title, items, detail = null) {
   requestAnimationFrame(() => {
     if (!open || opener !== anchor) return;
     const mw = m.offsetWidth, mh = m.offsetHeight;
-    const x = Math.min(r.right - mw, window.innerWidth - mw - 8);
+    // Openers on the left half (the chat run row) grow rightward; the row
+    // "…" buttons at the right edge keep growing leftward.
+    const x = r.left < window.innerWidth / 2 && r.left + mw <= window.innerWidth - 8
+      ? r.left
+      : Math.min(r.right - mw, window.innerWidth - mw - 8);
     let y = r.bottom + 4;
     if (y + mh > window.innerHeight - 8) y = Math.max(8, r.top - mh - 4);
     m.style.left = `${Math.max(8, x)}px`;
     m.style.top = `${y}px`;
     m.style.visibility = "";
-    focusableItems()[0]?.focus();
+    const items = focusableItems();
+    (items.find((item) => item.getAttribute("aria-checked") === "true") || items[0])?.focus();
   });
 }
 

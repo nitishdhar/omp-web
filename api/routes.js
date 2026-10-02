@@ -6,6 +6,7 @@ const sessions = require("../sessions");
 const { sendJson, sendError, readBody, listFolders, listProfiles, listProfileDetails } = require("./util");
 const { saveAttachment } = require("./attachments");
 const { getUsage } = require("./usage");
+const { listModels, switchModel } = require("./models");
 const { handleChat } = require("./chat-routes");
 const { getGitStatus } = require("./git-status");
 const { transcribeVoice } = require("./transcribe");
@@ -203,6 +204,25 @@ async function handleApi(req, res, url) {
       }
       const session = await sessions.reloadProfile(sub[1], { profile: wanted, model: body.model, noTitle: optBoolean(body.noTitle) });
       return sendJson(res, 200, { session });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+  if (req.method === "GET" && sub[0] === "profiles" && sub[1] && sub[2] === "models" && sub.length === 3) {
+    try {
+      return sendJson(res, 200, { models: await listModels(sub[1]) });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+  if (req.method === "POST" && sub[0] === "sessions" && sub[1] && sub[2] === "model" && sub.length === 3) {
+    try {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const result = await switchModel(sub[1], {
+        model: typeof body.model === "string" ? body.model : "",
+        effort: typeof body.effort === "string" ? body.effort : null,
+      });
+      return sendJson(res, 202, result);
     } catch (error) {
       return sendError(res, error);
     }

@@ -284,13 +284,17 @@ function rememberSubagent(state, task) {
   });
 }
 
-function applyRuntimeIdentity(state, model, provider, at) {
+// `keepEffort`: a model_change is OMP's own record of a switch, and OMP writes
+// thinking_level_change after it only when the level changed, so the level in
+// force carries over. Inferred changes (a reply naming another model) still
+// clear it.
+function applyRuntimeIdentity(state, model, provider, at, { keepEffort = false } = {}) {
   const nextModel = model ? boundedString(model) : null;
   const nextProvider = provider ? boundedString(provider) : null;
   const changed =
     (state.model && nextModel && state.model !== nextModel)
     || (state.provider && nextProvider && state.provider !== nextProvider);
-  if (changed) {
+  if (changed && !keepEffort) {
     state.effort = null;
     state.effortSource = null;
   }
@@ -334,7 +338,17 @@ function project(entries, prev) {
 
     // ── Model change ──
     if (type === "model_change") {
-      applyRuntimeIdentity(state, entry.model, null, at);
+      // model_change carries `provider/id` while replies carry `id` plus a
+      // provider field; split it so the two never read as a model change.
+      const named = typeof entry.model === "string" ? entry.model : "";
+      const slash = named.indexOf("/");
+      applyRuntimeIdentity(
+        state,
+        slash > 0 ? named.slice(slash + 1) : named,
+        slash > 0 ? named.slice(0, slash) : null,
+        at,
+        { keepEffort: true },
+      );
       items.push({ id, at, kind: "event", text: `Model: ${state.model || "unknown"}` });
       continue;
     }
