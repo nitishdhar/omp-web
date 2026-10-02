@@ -456,6 +456,12 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   session's chat, quick-key, draft, and attachment caches even when it is not
   selected; the visible terminal buffer is reset when the reloaded session is
   active.
+- Every terminal size tmux receives makes OMP clear the screen and rewrite its
+  whole transcript, for height-only changes too. Layout-driven fits
+  (`ResizeObserver` on `#term-wrap`, window resize) therefore wait until the
+  layout has been still for 160ms and send one size, so a sidebar collapse,
+  column drag, or keyboard animation costs one rewrite instead of one per
+  frame. Attach, reconnect, reactivation, and mode switches fit immediately.
 
 Transport bounds checklist (every number enforced in code, not advisory):
 
