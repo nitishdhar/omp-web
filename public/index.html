@@ -18,11 +18,11 @@
       } catch (e) {}
     </script>
     <link rel="stylesheet" href="/vendor/xterm.css" />
-    <link rel="stylesheet" href="/base.css?v=24" />
-    <link rel="stylesheet" href="/sidebar.css?v=52" />
-    <link rel="stylesheet" href="/terminal.css?v=66" />
+    <link rel="stylesheet" href="/base.css?v=25" />
+    <link rel="stylesheet" href="/sidebar.css?v=53" />
+    <link rel="stylesheet" href="/terminal.css?v=67" />
     <link rel="stylesheet" href="/modals.css?v=23" />
-    <link rel="stylesheet" href="/chat.css?v=57" />
+    <link rel="stylesheet" href="/chat.css?v=58" />
   </head>
   <body>
     <div id="app">
@@ -175,8 +175,8 @@
                 </div>
                 <div id="chat-empty" class="chat-placeholder" role="status" hidden>
                   <p class="chat-placeholder-kicker">Conversation</p>
-                  <h1>Ready when you are</h1>
-                  <p>Type below to start a new session, or pick up an existing one.</p>
+                  <h1 id="chat-empty-title">Ready when you are</h1>
+                  <p id="chat-empty-text">Type below to start a new session, or pick up an existing one.</p>
                   <div id="chat-empty-resume" class="chat-empty-resume"></div>
                   <p id="chat-landing-target" class="chat-landing-target" hidden></p>
                   <p class="chat-empty-hints"><kbd>/</kbd> search sessions <span class="chat-empty-sep">·</span> <kbd>Esc</kbd> close a panel</p>
@@ -366,5 +366,5 @@
     <script src="/vendor/xterm.js"></script>
     <script src="/vendor/addon-fit.js"></script>
     <script src="/vendor/addon-web-links.js"></script>
-    <script type="module" src="/js/main.js?v=181"></script>
+    <script type="module" src="/js/main.js?v=182"></script>
 </html>

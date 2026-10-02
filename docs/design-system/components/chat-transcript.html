@@ -17,7 +17,7 @@
   --font-ui:"Inter Variable",ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI Variable Text",sans-serif;
   --row-hover:rgba(255,255,255,.045); --pop-bg:#171a1e;
   --pop-shadow:0 8px 24px rgba(0,0,0,.36);
-  --reading-width:760px; --chat-text:13.5px; --term-bg:#101214; --bubble-user:#20252b;
+  --reading-width:760px; --chat-text:14px; --term-bg:#101214; --bubble-user:#20252b;
   --label:11px; --focus-ring:0 0 0 2px color-mix(in srgb,var(--accent) 60%,transparent);
 }
 *{box-sizing:border-box}
@@ -202,8 +202,15 @@ button{cursor:pointer;color:inherit}
     <div class="log"><div class="chat-placeholder">
       <span class="chat-placeholder-kicker">Conversation</span>
       <h1>Ready when you are</h1>
-      <p>Choose a session, then send a message below to begin.</p>
+      <p>Type below to start a new session, or pick up an existing one.</p>
     </div></div>
+    <div class="log"><div class="chat-placeholder">
+      <span class="chat-placeholder-kicker">Conversation</span>
+      <h1>No messages yet</h1>
+      <p>Send the first message to Omp Web Main.</p>
+    </div></div>
+    <p class="ds-note">No session selected gets the landing copy. A selected session with no
+      messages names itself; it never offers to start a new one.</p>
   </section>
 
 </div>

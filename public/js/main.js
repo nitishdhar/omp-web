@@ -76,6 +76,7 @@ function selectGhost(id) {
     return;
   }
   el["term-title"].textContent = `${item.title || id} · not running`;
+  el["term-title"].title = "";
   el["mode-toggle"].hidden = true;
   if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
   emit("sidebar:rerender");

@@ -85,6 +85,12 @@
 .folder-leaf .folder-toggle { gap: 6px; min-height: 32px; padding-left: 1px; }
 .folder-leaf .icon { flex: none; color: var(--faint); }
 @media (max-width: 1099px) { .folder-leaf .folder-toggle { min-height: 44px; } }
+/* One quiet disclosure for every folder without sessions: below the live
+   groups, so active projects are never interleaved with empty rows. */
+.idle-folders .idle-folders-toggle { padding-left: 0; }
+.idle-folders .folder-name { color: var(--faint); }
+.idle-folders-toggle:hover .folder-name, .idle-folders-toggle:focus-visible .folder-name { color: var(--text); }
+.idle-folders > .folder-sessions > .folder-leaf { opacity: .75; }
 
 /* Full-bleed rows. Nested rows used to sit indented, so the selected rail
    landed at an arbitrary x in the middle of the list and read as a stray blue

@@ -35,7 +35,7 @@ export function initDom() {
     "mode-toggle",
     "chat-mode", "chat-log", "chat-panels-toggle", "chat-panels-content",
     "chat-activity", "chat-ask", "chat-todo", "chat-agents", "chat-status",
-    "chat-empty", "chat-empty-resume", "chat-landing-target", "chat-loading", "chat-jump-latest", "chat-input", "chat-attach", "chat-send",
+    "chat-empty", "chat-empty-title", "chat-empty-text", "chat-empty-resume", "chat-landing-target", "chat-loading", "chat-jump-latest", "chat-input", "chat-attach", "chat-send",
     "chat-interrupt", "chat-voice", "chat-voice-status", "chat-advisor",
     "ghost-mode", "ghost-title", "ghost-summary", "ghost-meta",
     "ghost-back-btn", "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn",

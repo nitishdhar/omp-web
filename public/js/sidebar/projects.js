@@ -36,6 +36,11 @@ function persistCollapsed() {
     localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...collapsedProjects]));
   } catch {}
 }
+// Folders with no sessions share one disclosure after the live ones; shut by
+// default, and remembered separately from per-folder collapse.
+const IDLE_FOLDERS_KEY = "omp_web_idle_folders_open_v1";
+let idleFoldersOpen = false;
+try { idleFoldersOpen = localStorage.getItem(IDLE_FOLDERS_KEY) === "1"; } catch {}
 
 function openSessionMenu(anchor, session) {
   const items = [
@@ -302,6 +307,35 @@ function emptyFolderRow(folder) {
   return row;
 }
 
+function idleFoldersGroup(folders) {
+  const group = elem("li", {
+    class: "folder-group idle-folders" + (idleFoldersOpen ? "" : " collapsed"),
+  });
+  const label = `${idleFoldersOpen ? "Hide" : "Show"} ${folders.length} folders without sessions`;
+  group.append(elem("div", { class: "folder-head" }, elem("button", {
+    class: "folder-toggle idle-folders-toggle",
+    type: "button",
+    "aria-expanded": String(idleFoldersOpen),
+    "aria-label": label,
+    title: label,
+    onclick: () => {
+      idleFoldersOpen = !idleFoldersOpen;
+      try { localStorage.setItem(IDLE_FOLDERS_KEY, idleFoldersOpen ? "1" : "0"); } catch {}
+      emit("sidebar:rerender");
+    },
+  },
+    elem("span", { class: "folder-chevron", text: "›", "aria-hidden": "true" }),
+    elem("span", { class: "folder-name", text: "Other folders" }),
+    elem("span", { class: "folder-count", text: `(${folders.length})` }),
+  )));
+  if (idleFoldersOpen) {
+    const list = elem("ul", { class: "folder-sessions", "aria-label": "Folders without sessions" });
+    for (const folder of folders) list.append(emptyFolderRow(folder));
+    group.append(list);
+  }
+  return group;
+}
+
 // Not-running sessions live in their folders; this is only the bulk action.
 // "Restore all" starts an OMP process per session, so it confirms first.
 function restoreAllRow(ghosts) {
@@ -445,9 +479,11 @@ export function render(host, sessions, { onOpen, ghosts = [], freezeRecent = fal
   const recentSection = sessionSection("Recent", "recent-section", recent, onOpen);
   if (recentSection) host.append(recentSection);
 
-  // Every workspace folder is listed, not only the ones with a live session:
-  // the sidebar is also where you pick a project to start in, and folders
-  // vanishing as their last session ended read as data loss.
+  // Every workspace folder stays listed: the sidebar is also where you pick a
+  // project to start in, and folders vanishing as their last session ended
+  // read as data loss. Empty ones collect in one group after the live ones;
+  // interleaved, a handful of sessions sat between dozens of empty rows.
+  const idle = [];
   for (const folder of folders) {
     // One session, one place for the status/pin sections: waiting/working/
     // pinned hoist into their ranked sections above and do not duplicate into
@@ -460,7 +496,10 @@ export function render(host, sessions, { onOpen, ghosts = [], freezeRecent = fal
     // session the folder lists, live or not.
     const dead = folder.ghosts.slice().sort(stableCreatedOrder);
     if (!rows.length && !dead.length) {
-      host.append(emptyFolderRow(folder));
+      // All of its sessions hoisted above: the folder still has work, so it
+      // keeps its place instead of joining the empty ones.
+      if (folder.sessions.length) host.append(emptyFolderRow(folder));
+      else idle.push(folder);
       continue;
     }
     const expanded = !collapsedProjects.has(folder.path);
@@ -485,4 +524,5 @@ export function render(host, sessions, { onOpen, ghosts = [], freezeRecent = fal
 
   const restoreAll = restoreAllRow(ghosts);
   if (restoreAll) host.append(restoreAll);
+  if (idle.length) host.append(idleFoldersGroup(idle));
 }
