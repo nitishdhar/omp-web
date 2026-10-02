@@ -28,7 +28,7 @@ function errorStatus(error) {
   if (code === "ENOSESSION" || code === "ENOTRANSCRIPT" || code === "ENOTFOUND") return 404;
   if (code === "EEXIST" || code === "ENOSESSIONFILE" || code === "ECONFLICT" || code === "EBUSY") return 409;
   if (code === "EUNSUPPORTEDATTACHMENT") return 415;
-  if (code === "ENOTRANSCRIBER" || code === "EVOICEUPSTREAM" || code === "EVOICETIMEOUT") return 503;
+  if (code === "ENOTRANSCRIBER" || code === "EVOICEUPSTREAM" || code === "EVOICETIMEOUT" || code === "EMODELSUNAVAILABLE") return 503;
   if (
     error instanceof SyntaxError ||
     (typeof code === "string" && code.startsWith("EBAD")) ||
