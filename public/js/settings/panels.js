@@ -8,6 +8,7 @@ import { el, elem } from "../dom.js";
 import { api } from "../api.js";
 import { emit } from "../state.js";
 import { showNotice } from "../notice.js";
+import { slugify } from "../format.js";
 
 const ENDPOINT = "/settings/panels";
 
@@ -19,11 +20,6 @@ let editing = null; // draft key with its inline editor open
 let idTouched = false; // the add form stops auto-slugging once the id is edited
 let keySeq = 0;
 const checks = new Map(); // url -> { text, tone }
-
-function slugify(label) {
-  return label.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40).replace(/-+$/, "");
-}
 
 function withKey(panel) {
   return { key: ++keySeq, id: panel.id, label: panel.label, url: panel.url };
@@ -259,7 +255,7 @@ export function show() {
 
 export function wire() {
   el["settings-panel-label"].addEventListener("input", () => {
-    if (!idTouched) el["settings-panel-id"].value = slugify(el["settings-panel-label"].value);
+    if (!idTouched) el["settings-panel-id"].value = slugify(el["settings-panel-label"].value, 40);
   });
   el["settings-panel-id"].addEventListener("input", () => {
     idTouched = el["settings-panel-id"].value !== "";

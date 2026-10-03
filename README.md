@@ -149,6 +149,7 @@ such as `python` and `speech`. It is not an account or profile command.
 | `omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login]` | Set up only omp-web and optionally hand off to native OMP. |
 | `omp-web artifact <new\|list\|path\|url\|check\|touch>` | Create and maintain [artifacts](#artifacts); `omp-web artifact --help` lists the options. |
 | `omp-web addresses [--json]` | List the addresses this console answers on, whether each is reachable with the current bind, and which one links use. Works while the server is down. See [Addresses](#addresses). |
+| `omp-web credential <list\|set\|import\|rm>` | Manage [credentials](#credentials) without the browser; values are read from stdin or imported once, never shown. Works while the server is down. |
 | `omp-web --help` | Show command help. |
 | `npm start` | Start the server directly from a source checkout. |
 | `npm run doctor` / `npm run setup` | Source-checkout equivalents of the CLI commands. |
@@ -274,9 +275,6 @@ both take precedence over the application default.
 | `OMP_WEB_TOKEN` | empty | Access token. When set, HTTP and WebSocket endpoints require it; `setup --token` creates the file instead. Keep it private; do not commit or share it. |
 | `OMP_WEB_ALLOW_OPEN` | empty | Set to `1` to run with no access token on a non-loopback bind. Accepts that anyone reaching the port controls the sessions; the server refuses open LAN binds without it. |
 | `OMP_WEB_PANELS` | empty | JSON array of local web apps to show inside omp-web. Panels can also be added in Settings; panels from this variable are locked there. See [Panels](#panels). |
-| `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
-| `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this machine and sent only to the configured transcription service. |
-| `OMP_WEB_TRANSCRIBE_MODEL` | empty | Transcription model name. |
 
 **Profile information** is projected from each native OMP profile's
 `modelRoles` block. The New session and Reload profile dialogs show the default
@@ -291,13 +289,6 @@ panel dynamically shows every distinct provider, account, and limit window OMP
 reports. Provider credentials and account metadata never reach the browser.
 Providers without a quota API retain OMP's no-limits explanation.
 
-Voice input is disabled unless **all three** transcription variables—the base
-URL, API key, and model—are configured. The browser sends a recorded clip to
-omp-web; omp-web forwards it to the configured OpenAI-compatible
-`/audio/transcriptions` endpoint. The transcription key is not sent to the
-browser. Add those variables to the private `OMP_WEB_HOME/env` file or provide
-them through the process environment, then restart the foreground server.
-
 **Updating omp.** Settings → OMP shows the installed and latest omp version
 (`omp update --check`, cached for six hours) and can update omp on the host:
 it runs `omp update` as the user the omp-web server runs as, using whatever
@@ -306,6 +297,74 @@ it. Running sessions keep the old binary until restarted, so **Reload
 profiles** then refreshes every profile's model catalog
 (`omp --profile=<name> models refresh`) and restarts idle sessions still on the
 old version; busy ones are skipped.
+
+### Credentials
+
+omp-web keeps its own named secrets (provider API keys) and never shows a value
+again after it is saved: the API, Settings, logs and error messages carry only
+the name, a label, the store and the last four characters (for values of 12 or
+more characters). Manage them in **Settings → Credentials** or with the CLI.
+Each credential lives in one store:
+
+| Store | Where the value lives |
+| --- | --- |
+| File (default) | `OMP_WEB_HOME/credentials.json`, mode 0600, written atomically. Names and metadata live in `settings.json`; values never do. |
+| Keychain (macOS) | The login keychain, service `omp-web`, account = credential name. Values up to about 3,900 characters. |
+
+The Keychain answers only a server running in your login session (started
+from a terminal). A server started by a background service such as a
+LaunchAgent is refused it ("User interaction is not allowed"); omp-web probes
+this once per start, and Settings shows Keychain as unavailable with the
+reason instead of failing later. Changing a credential's store moves the
+value; a credential still used by Voice or passed to OMP cannot be deleted.
+
+```bash
+some-vault-cli get voice-key | omp-web credential set voice-api-key --label "Voice API key"
+omp-web credential import voice-api-key --env VOICE_KEY           # copy once from this shell's environment
+omp-web credential import voice-api-key --file ~/old.env --key VOICE_KEY   # or a KEY=value line (whole file without --key)
+pbpaste | omp-web credential set work-key --store keychain        # Keychain, from a terminal
+omp-web credential list [--json]
+omp-web credential rm work-key
+```
+
+`set` reads one line from stdin and refuses a terminal prompt or an empty
+value, so the value never appears in arguments or shell history. `import`
+copies the value once; the variable or file is not needed afterwards. A running
+server sees CLI changes on its next request.
+
+### Voice input
+
+Configure voice input in **Settings → Voice**: an OpenAI-compatible base URL
+(e.g. `https://api.example.com/v1`), a model (e.g. `whisper-1`) and the
+credential holding the API key. **Test** calls `GET <base URL>/models` with the
+key. The browser sends a recorded clip to omp-web, which forwards it to
+`<base URL>/audio/transcriptions`; the key never reaches the browser. Changes
+apply without a restart, and the composer's mic button follows readiness.
+
+Earlier versions read `OMP_WEB_TRANSCRIBE_BASE_URL`, `OMP_WEB_TRANSCRIBE_API_KEY`
+and `OMP_WEB_TRANSCRIBE_MODEL`. On the first start without voice settings,
+omp-web moves them into Settings (credential `voice-api-key`, file store) and
+ignores them from then on; `omp-web doctor` warns while any is still set so you
+can remove it from `OMP_WEB_HOME/env` or the service environment.
+
+### Keys passed to OMP
+
+**Settings → Keys passed to OMP** maps environment variables to credentials
+(e.g. `OPENAI_API_KEY` → `openai-key`). Every omp that omp-web launches gets
+them: Terminal and Chat sessions, and the omp runs behind the model catalog,
+usage, version checks, updates and skills settings. Values are added on top of
+the server's environment. If `OMP_WEB_OMP_BIN` is a wrapper script that sets
+the same variable itself, the wrapper's value wins.
+
+A session resolves the keys inside its pane: the pane command carries only the
+variable names, and a small resolver passes the values to the pane shell over
+a pipe, so they never appear in process arguments, tmux options or commands,
+shell history, logs, or any file besides the credential store. A credential
+that cannot be read (missing, or Keychain from a background service) leaves
+that variable unset; the session still starts and its pane shows one line
+naming the variable. Changes apply to the next omp launch. Like any
+environment variable, the values are visible to processes of the same user
+that can read omp's environment.
 
 ### Addresses
 
@@ -467,8 +526,11 @@ the localhost HTTP and WebSocket endpoints with a private token — required
 before binding any non-loopback address (the server refuses to start open
 outside loopback unless `OMP_WEB_ALLOW_OPEN=1` explicitly accepts that risk).
 Either way it is not a sandbox, multi-user system, or remote-access product.
-Keep the server on loopback, protect the token and any optional transcription
-key, and choose a workspace whose contents that user is allowed to access.
+Keep the server on loopback, protect the token and the credential store
+(`OMP_WEB_HOME/credentials.json`, or the Keychain), and choose a workspace
+whose contents that user is allowed to access. Credential values are
+write-only through the API and the CLI; anyone who can run commands as this OS
+user can still read them from the store or from a running omp's environment.
 
 If you independently put a trusted reverse proxy in front of the server, it
 must preserve the request `Host` header. omp-web compares browser `Origin`

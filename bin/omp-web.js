@@ -22,6 +22,7 @@ function usage() {
        omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login] [--token]
        omp-web artifact <new|list|path|url|check|touch> ...
        omp-web addresses [--json]
+       omp-web credential <list|set|import|rm> ...
 
 Commands:
   start       Run omp-web in the foreground (the default command).
@@ -31,6 +32,8 @@ Commands:
   setup       Configure a workspace, and with --token create a private access token.
   artifact    Create, list, link and check artifacts (run \`omp-web artifact --help\`).
   addresses   List the addresses this console answers on; * marks the one links use.
+  credential  Manage stored credentials; values are never shown
+              (run \`omp-web credential --help\`).
 
 Setup options:
   --workspace PATH    Existing folder root shown by the project picker.
@@ -394,9 +397,23 @@ function doctor() {
   // and the server repairs it on its next start.
   for (const row of inspectInstallLinks()) console.log(`${row.level} ${row.label} — ${row.detail}`);
   checkSessionPersistence();
+  checkIgnoredTranscribeEnv();
   if (!healthy) {
     console.error("\nFix the failed prerequisites, then rerun `omp-web doctor`.");
     process.exitCode = 1;
+  }
+}
+
+// The OMP_WEB_TRANSCRIBE_* variables were migrated into Settings → Voice on
+// first start (api/voice-settings.js) and are ignored since; a leftover key in
+// a plain-text file is worth removing.
+function checkIgnoredTranscribeEnv() {
+  const { ENV_KEYS } = require("../api/voice-settings");
+  const inFile = envKeys(config.envFile);
+  for (const key of ENV_KEYS) {
+    if (process.env[key] === undefined) continue;
+    const where = inFile.has(key) ? config.envFile : "the service environment";
+    console.log(`WARN ${key} — ignored; managed in Settings → Voice, remove it from ${where}`);
   }
 }
 
@@ -642,6 +659,7 @@ async function main() {
   }
   if (command === "artifact") return require("./artifact-cli").runArtifact(args);
   if (command === "addresses") return require("./addresses-cli").runAddresses(args);
+  if (command === "credential") return require("./credential-cli").runCredential(args);
   if (command === "setup") {
     if (args[0] === "-h" || args[0] === "--help") return usage();
     return setup(args);

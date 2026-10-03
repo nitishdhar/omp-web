@@ -8,6 +8,7 @@ const path = require("path");
 const config = require("../config");
 const { profileHome } = require("../transcripts");
 const { sessionProcesses } = require("./stats");
+const { withOmpCredentials } = require("./omp-env");
 
 const CHECK_TIMEOUT_MS = 30_000;
 const CHECK_OK_MS = 6 * 60 * 60_000;
@@ -24,18 +25,20 @@ function stripAnsi(text) {
   return String(text).replace(ANSI, "");
 }
 
-// Same profile selection as a session launch (see api/models.js): an
-// inherited OMP_PROFILE would otherwise retarget the default profile.
-function ompEnv() {
+// Same profile selection as a session launch: an inherited OMP_PROFILE would
+// otherwise retarget the default profile. Every omp the server runs itself
+// also gets the Keys passed to OMP (api/omp-env.js), like a session does.
+async function ompEnv() {
   const env = { ...process.env, PI_CODING_AGENT_DIR: profileHome("default") };
   delete env.OMP_PROFILE;
   delete env.PI_PROFILE;
-  return env;
+  return withOmpCredentials(env);
 }
 
-function capture(args, timeoutMs) {
+async function capture(args, timeoutMs) {
+  const env = await ompEnv();
   return new Promise((resolve) => {
-    execFile(config.ompBin, args, { timeout: timeoutMs, env: ompEnv(), maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(config.ompBin, args, { timeout: timeoutMs, env, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
       const output = stripAnsi(`${stdout || ""}\n${stderr || ""}`);
       if (!error) return resolve({ ok: true, output });
       const reason = error.killed ? "timed out"

@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="/sidebar.css?v=56" />
     <link rel="stylesheet" href="/terminal.css?v=68" />
     <link rel="stylesheet" href="/modals.css?v=24" />
-    <link rel="stylesheet" href="/settings.css?v=3" />
+    <link rel="stylesheet" href="/settings.css?v=5" />
     <link rel="stylesheet" href="/artifacts.css?v=1" />
     <link rel="stylesheet" href="/chat.css?v=60" />
   </head>
@@ -246,6 +246,8 @@
               <button type="button" class="set-nav-item" data-section="general">General</button>
               <button type="button" class="set-nav-item" data-section="omp">OMP</button>
               <button type="button" class="set-nav-item" data-section="panels">Panels</button>
+              <button type="button" class="set-nav-item" data-section="voice">Voice</button>
+              <button type="button" class="set-nav-item" data-section="credentials">Credentials</button>
               <button type="button" class="set-nav-item" data-section="sessions">Sessions &amp; memory</button>
               <button type="button" class="set-nav-item" data-section="storage">Storage</button>
               <button type="button" class="set-nav-item" data-section="folders">Viewer folders</button>
@@ -330,6 +332,46 @@
                 <div class="set-savebar">
                   <span id="settings-panels-status" class="set-savebar-status" role="status"></span>
                   <button id="settings-panels-save" class="primary" type="button" disabled>Save panels</button>
+                </div>
+              </section>
+              <section class="set-section" data-section="voice" aria-label="Voice" hidden>
+                <h2>Voice</h2>
+                <p class="set-note set-note-lead">Dictation sends each clip to an OpenAI-compatible transcription service. omp-web holds the key; the browser never sees it.</p>
+                <p id="settings-voice-state" class="set-totals set-voice-state" role="status">Loading…</p>
+                <div class="set-panel-form set-voice-form">
+                  <label class="set-field"><span>Base URL</span><input id="settings-voice-url" type="url" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="https://api.example.com/v1" /></label>
+                  <label class="set-field"><span>Model</span><input id="settings-voice-model" type="text" maxlength="200" autocomplete="off" autocapitalize="none" spellcheck="false" placeholder="whisper-1" /></label>
+                  <label class="set-field"><span>API key</span><select id="settings-voice-credential"></select></label>
+                  <div id="settings-voice-new" class="set-voice-new" hidden></div>
+                  <p class="set-note">Leave the base URL empty to turn voice input off. Test calls <code>GET &lt;base URL&gt;/models</code> with the key.</p>
+                  <div class="set-actions">
+                    <button id="settings-voice-test" class="ghost set-btn" type="button">Test</button>
+                    <span id="settings-voice-check" class="set-pill" role="status" hidden></span>
+                    <span class="spacer"></span>
+                    <button id="settings-voice-save" class="primary set-btn" type="button">Save</button>
+                  </div>
+                </div>
+              </section>
+              <section class="set-section" data-section="credentials" aria-label="Credentials" hidden>
+                <h2>Credentials</h2>
+                <p class="set-note set-note-lead">Values stay on this machine and are never shown again. Keychain needs the omp-web service to run in your login session.</p>
+                <p id="settings-credentials-status" class="set-error" role="status"></p>
+                <ul id="settings-credentials-list" class="set-panels set-creds" aria-label="Stored credentials"></ul>
+                <div id="settings-credential-add"></div>
+                <div class="set-group set-omp-env">
+                  <h3>Passed to OMP</h3>
+                  <p class="set-note set-note-lead">New OMP sessions get these as environment variables, such as API keys an OMP profile reads. Running sessions pick them up after a profile reload.</p>
+                  <ul id="settings-omp-env-list" class="set-roots set-omp-env-list" aria-label="Environment variables passed to OMP"></ul>
+                  <form id="settings-omp-env-form" class="set-root-form set-omp-env-form" novalidate>
+                    <input id="settings-omp-env-var" type="text" maxlength="128" placeholder="PROVIDER_API_KEY" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Environment variable name" />
+                    <select id="settings-omp-env-credential" aria-label="Credential"></select>
+                    <button id="settings-omp-env-add" class="ghost" type="submit">Add</button>
+                  </form>
+                  <p id="settings-omp-env-error" class="set-error" role="alert"></p>
+                  <div class="set-savebar">
+                    <span id="settings-omp-env-status" class="set-savebar-status" role="status"></span>
+                    <button id="settings-omp-env-save" class="primary" type="button" disabled>Save</button>
+                  </div>
                 </div>
               </section>
               <section class="set-section" data-section="sessions" aria-label="Sessions and memory" hidden>
@@ -516,5 +558,5 @@
     <script src="/vendor/xterm.js"></script>
     <script src="/vendor/addon-fit.js"></script>
     <script src="/vendor/addon-web-links.js"></script>
-    <script type="module" src="/js/main.js?v=193"></script>
+    <script type="module" src="/js/main.js?v=195"></script>
 </html>

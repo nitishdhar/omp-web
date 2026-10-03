@@ -36,11 +36,12 @@ function logLine(target, raw) {
 
 // Streams stdout and stderr into the job log line by line; `\r` progress
 // redraws count as lines too. `lastLine` is what a failure most likely said.
-function spawnLogged(target, args, timeoutMs) {
+async function spawnLogged(target, args, timeoutMs) {
+  const env = await ompEnv();
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(config.ompBin, args, { stdio: ["ignore", "pipe", "pipe"], env: ompEnv() });
+      child = spawn(config.ompBin, args, { stdio: ["ignore", "pipe", "pipe"], env });
     } catch (error) {
       resolve({ code: null, error: error.message });
       return;

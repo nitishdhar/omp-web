@@ -57,10 +57,11 @@ function bundledSkills() {
 
 // ---- Profile config through omp --------------------------------------------------
 
-function runConfig(profile, args) {
+async function runConfig(profile, args) {
   const argv = profile === "default" ? ["config", ...args] : [`--profile=${profile}`, "config", ...args];
+  const env = await ompEnv();
   return new Promise((resolve, reject) => {
-    execFile(config.ompBin, argv, { env: ompEnv(), timeout: OMP_TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(config.ompBin, argv, { env, timeout: OMP_TIMEOUT_MS, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
       if (!error) return resolve(stripAnsi(stdout));
       const said = stripAnsi(`${stderr || ""}\n${stdout || ""}`).split("\n").map((line) => line.trim()).filter(Boolean).at(-1);
       reject(codedError("ESKILLCONFIG", `omp config failed for ${profile}: ${said || (error.killed ? "timed out" : error.message)}`));

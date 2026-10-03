@@ -24,6 +24,7 @@ const purgeData = require("./sessions/purge");
 const { listFolders } = require("./api/util");
 const runner = require("./sessions/runner");
 const { timerMinutes } = require("./api/runtime-settings");
+const { ompEnvNames, withOmpCredentials } = require("./api/omp-env");
 
 // Thin wrapper around a dedicated tmux server (socket `config.tmuxSocket`).
 // tmux is the source of truth for session liveness; per-session metadata
@@ -183,17 +184,19 @@ function ompLaunchArgs({ profile, sessionDir, source, fork = false, model, noTit
 }
 
 function paneCommandFor(id, runnerName, args) {
+  const envNames = ompEnvNames();
   if (runnerName === "rpc") {
     return runner.rpcPaneCommand([
       ...ompEnv(id),
       `OMP_WEB_RPC_IDLE_MINUTES=${timerMinutes("rpcIdleMinutes")}`,
       process.execPath, runner.BRIDGE, runner.socketPath(id), "--",
       config.ompBin, "--mode", "rpc-ui", "--no-ui", ...args,
-    ]);
+    ], envNames);
   }
   return runner.recoverableAgentCommand(
     [...ompEnv(id), config.ompBin, "--extension", STATUS_EXTENSION, ...args],
-    tmuxPane(id)
+    tmuxPane(id),
+    envNames,
   );
 }
 
@@ -1583,7 +1586,7 @@ async function contextWindowFor(profile, provider, model) {
   if (cached && Date.now() - cached.at < MODEL_WINDOW_CACHE_TTL_MS) {
     return cached.value;
   }
-  const env = { ...process.env };
+  const env = await withOmpCredentials(process.env);
   try {
     const { stdout } = await new Promise((resolve, reject) => {
       execFile(
