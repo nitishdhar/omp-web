@@ -2,7 +2,7 @@
 // Every address this console answers on, and which one absolute links use.
 // Shared by the server (Settings, /api/artifacts `link`) and the CLI, which
 // must work while the server is down, so nothing here asks the server: it
-// reads config (bind host/port), settings.json and the host's network state.
+// reads the bind host/port, settings.json and the host's network state.
 const childProcess = require("child_process");
 const fs = require("fs");
 const os = require("os");
@@ -26,6 +26,42 @@ function settingError(code, message) {
   const error = new Error(message);
   error.code = code;
   return error;
+}
+
+// The service manager usually sets OMP_WEB_HOST/PORT only for the server, so
+// an agent's shell running the CLI would assume the 127.0.0.1 default and
+// print links nobody else can open. The server records its real bind here;
+// the CLI uses it while that server is alive.
+const BIND_FILE = require("path").join(config.ompWebHome, "run", "server.json");
+
+function recordBind() {
+  try {
+    fs.mkdirSync(require("path").dirname(BIND_FILE), { recursive: true });
+    const tmp = `${BIND_FILE}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify({ host: config.host, port: config.port, pid: process.pid }), { mode: 0o600 });
+    fs.renameSync(tmp, BIND_FILE);
+  } catch (error) {
+    console.error(`omp-web: could not record the bind address: ${error.message}`);
+  }
+}
+
+function alive(pid) {
+  try { process.kill(pid, 0); return true; } catch (error) { return error.code === "EPERM"; }
+}
+
+// -> { host, port }: the env when set here, else the running server's record,
+// else config defaults.
+function bind() {
+  if (!process.env.OMP_WEB_HOST && !process.env.OMP_WEB_PORT) {
+    try {
+      const saved = JSON.parse(fs.readFileSync(BIND_FILE, "utf8"));
+      if (Number.isInteger(saved.pid) && saved.pid !== process.pid && alive(saved.pid)
+        && typeof saved.host === "string" && Number.isInteger(saved.port)) {
+        return { host: saved.host, port: saved.port };
+      }
+    } catch {}
+  }
+  return { host: config.host, port: config.port };
 }
 
 // -> normalized origin, or throws EBADSETTING. Paths are refused because every
@@ -172,14 +208,16 @@ function bindKind(host) {
   return "specific";
 }
 
-function origin(host) {
-  return `http://${host}:${config.port}`;
+function originFor(port) {
+  return (host) => `http://${host}:${port}`;
 }
 
 // -> [{kind, url, label, reachable}] in link order.
 async function listAddresses() {
-  const host = String(config.host || "").trim().toLowerCase();
-  const bind = bindKind(host);
+  const { host: boundHost, port } = bind();
+  const origin = originFor(port);
+  const host = String(boundHost || "").trim().toLowerCase();
+  const bindType = bindKind(host);
   const out = [];
   const add = (kind, url, reachable) => out.push({ kind, url, label: LABELS[kind], reachable });
 
@@ -192,17 +230,17 @@ async function listAddresses() {
   const tsIp = ts?.ip || "";
   // The name resolves to the Tailscale IP, so binding that IP serves it too.
   if (ts?.name) {
-    add("tailscale-name", origin(ts.name), bind === "all" || host === tsIp || host === ts.name.toLowerCase());
+    add("tailscale-name", origin(ts.name), bindType === "all" || host === tsIp || host === ts.name.toLowerCase());
   }
-  if (tsIp) add("tailscale-ip", origin(tsIp), bind === "all" || host === tsIp);
+  if (tsIp) add("tailscale-ip", origin(tsIp), bindType === "all" || host === tsIp);
 
   const lanIps = lanIPv4s(new Set(tsIp ? [tsIp] : []));
   // Bound to one LAN address: name that address, not a name that may resolve
   // to another interface.
-  const lan = bind === "specific" && lanIps.includes(host) ? host : lanHost(lanIps);
-  if (lan) add("lan", origin(lan), bind === "all" || host === lan);
+  const lan = bindType === "specific" && lanIps.includes(host) ? host : lanHost(lanIps);
+  if (lan) add("lan", origin(lan), bindType === "all" || host === lan);
 
-  add("local", origin("127.0.0.1"), bind !== "specific");
+  add("local", origin("127.0.0.1"), bindType !== "specific");
   return out;
 }
 
@@ -213,7 +251,8 @@ function pickLink(addresses) {
   }
   // Bound to a specific address none of the probes recognised (e.g. a
   // hostname): that bind is still the one address known to answer.
-  return origin(config.host);
+  const { host, port } = bind();
+  return originFor(port)(host);
 }
 
 async function linkBase() {
@@ -237,4 +276,4 @@ async function setAddresses(input) {
   return addressesStatus();
 }
 
-module.exports = { listAddresses, linkBase, addressesStatus, setAddresses };
+module.exports = { listAddresses, linkBase, addressesStatus, setAddresses, recordBind, bind };

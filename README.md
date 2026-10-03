@@ -320,7 +320,9 @@ configuration. In order:
 | Local network | `http://<host>.local:<port>` on macOS, else the first non-loopback IPv4. |
 | This machine | `http://127.0.0.1:<port>`. |
 
-Each address is marked reachable or not from `OMP_WEB_HOST`: a loopback bind
+Each address is marked reachable or not from the server's bind (`OMP_WEB_HOST`;
+the running server records it in `OMP_WEB_HOME/run/server.json`, so the CLI
+uses the real bind even from a shell that doesn't set it): a loopback bind
 reaches only this machine, a bind to one address reaches only that address
 (binding the Tailscale IP also covers the Tailscale name), and `0.0.0.0` or
 `::` reaches all. The public address is always treated as reachable, since a
