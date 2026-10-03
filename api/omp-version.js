@@ -87,28 +87,52 @@ async function cachedCheck(refresh) {
   return checking;
 }
 
-// `which omp`: config.ompBin itself when it is a path, else the first
-// executable on PATH.
-function whichOmp() {
-  if (config.ompBin.includes("/")) return path.resolve(config.ompBin);
+function firstOnPath(name, skip = new Set()) {
   for (const dir of (process.env.PATH || "").split(":").filter(Boolean)) {
-    const candidate = path.join(dir, config.ompBin);
+    const candidate = path.join(dir, name);
     try {
       fs.accessSync(candidate, fs.constants.X_OK);
-      if (fs.statSync(candidate).isFile()) return candidate;
+      if (fs.statSync(candidate).isFile() && !skip.has(fs.realpathSync(candidate))) return candidate;
     } catch {}
   }
   return null;
 }
 
+function isScript(file) {
+  try {
+    const fd = fs.openSync(file, "r");
+    try {
+      const head = Buffer.alloc(2);
+      fs.readSync(fd, head, 0, 2, 0);
+      return head.toString("latin1") === "#!";
+    } finally { fs.closeSync(fd); }
+  } catch { return false; }
+}
+
+// The files whose replacement means a new omp. OMP_WEB_OMP_BIN is often a
+// launch wrapper script that execs `omp` from PATH; its own ctime never moves
+// when omp updates, so the omp it reaches counts too.
+function ompFiles() {
+  const bin = config.ompBin.includes("/") ? path.resolve(config.ompBin) : firstOnPath(config.ompBin);
+  if (!bin) return [];
+  const files = [bin];
+  if (isScript(bin)) {
+    let own = bin;
+    try { own = fs.realpathSync(bin); } catch {}
+    const reached = firstOnPath("omp", new Set([own]));
+    if (reached) files.push(reached);
+  }
+  return files;
+}
+
 // Package managers swap the symlink (Homebrew) or replace the file in place,
-// so the newer of the link's and the target's ctime is when this omp landed.
+// so the newest ctime of each file and its target is when this omp landed.
 function installedAt() {
-  const found = whichOmp();
-  if (!found) return null;
   let newest = 0;
-  try { newest = Math.max(newest, fs.lstatSync(found).ctimeMs); } catch {}
-  try { newest = Math.max(newest, fs.statSync(fs.realpathSync(found)).ctimeMs); } catch {}
+  for (const file of ompFiles()) {
+    try { newest = Math.max(newest, fs.lstatSync(file).ctimeMs); } catch {}
+    try { newest = Math.max(newest, fs.statSync(fs.realpathSync(file)).ctimeMs); } catch {}
+  }
   return newest ? Math.round(newest) : null;
 }
 
