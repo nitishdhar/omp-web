@@ -132,14 +132,6 @@ function buildSessionRow(session, { onOpen, menu, showFolder = false, narrow = f
       title: "This session is blocked on an answer or approval",
     }));
   }
-  if (unread) {
-    row.append(elem("span", {
-      class: "unread-dot",
-      text: "●",
-      title: "Session produced output since you last opened it",
-      "aria-hidden": "true",
-    }));
-  }
   if (showFolder && narrow) {
     row.append(elem("span", {
       class: "session-folder",
@@ -163,6 +155,16 @@ function buildSessionRow(session, { onOpen, menu, showFolder = false, narrow = f
   }
   open.append(lines);
   li.append(open);
+  // Trailing column, beside the pin and menu: inside the title line it sat on
+  // line one while the row actions centre on the whole two-line row.
+  if (unread) {
+    li.append(elem("span", {
+      class: "unread-dot",
+      text: "●",
+      title: "Session produced output since you last opened it",
+      "aria-hidden": "true",
+    }));
+  }
   if (menu) {
     // Pinning was two clicks inside the overflow menu, and now that folders
     // list pinned sessions too, a row gave no sign of its own pin state. The
