@@ -440,8 +440,13 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   link). Responses carry `Content-Security-Policy: sandbox ...` without
   `allow-same-origin`, so a page opened directly or framed gets an opaque
   origin: no access to omp-web's localStorage/cookies, `/api` calls fail
-  (no token, `403 EORIGIN` for `Origin: null`), and `connect-src 'self'`
-  blocks other hosts. Verified in headless Chromium, direct and framed.
+  (no token, `403 EORIGIN` for `Origin: null`), and `default-src`,
+  `connect-src` and `img-src` name only this artifact's folder
+  (`http(s)://<Host>/a/<cap>/<slug>/`), so the page can't reach other hosts,
+  other artifacts or `/api`. The folder is named instead of `'self'` because
+  WebKit resolves `'self'` in a sandboxed document to its opaque origin and
+  then blocks the page's own `data.json`. Verified in headless Chromium and
+  WebKit (iPhone viewport), direct and framed.
 - This is trusted-owner access to a host shell, not a sandbox or multi-user
   service. Non-local use requires a trusted private network or secured HTTPS
   proxy. Provider credentials stay with OMP, not the browser.

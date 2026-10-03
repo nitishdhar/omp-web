@@ -10,16 +10,38 @@ const { capMatches, readManifest, resolveServed } = require("./artifact-store");
 // when opened directly in a tab: it cannot read omp-web's localStorage or
 // cookies, and its /api calls carry no token. Its own fetch('./data.json') is
 // therefore cross-origin, hence Access-Control-Allow-Origin: *.
-const SECURITY_HEADERS = {
-  "content-security-policy":
-    "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads; "
-    + "default-src 'self' 'unsafe-inline' data: blob:; connect-src 'self'; "
-    + "img-src 'self' data: blob:; frame-ancestors 'self'",
+const BASE_HEADERS = {
   "access-control-allow-origin": "*",
   "x-content-type-options": "nosniff",
   "referrer-policy": "no-referrer",
   "cache-control": "no-cache",
 };
+const SANDBOX = "sandbox allow-scripts allow-forms allow-popups allow-modals allow-downloads";
+const SECURITY_HEADERS = {
+  ...BASE_HEADERS,
+  "content-security-policy": `${SANDBOX}; default-src 'none'; frame-ancestors 'self'`,
+};
+const HOST = /^(?:[A-Za-z0-9.-]+|\[[0-9A-Fa-f:.]+\])(?::\d{1,5})?$/;
+
+// WebKit (every iOS browser, Safari) resolves 'self' in a sandboxed document
+// to its opaque origin, so 'self' blocks the page's own data.json there
+// ("Load failed"). Naming this artifact's folder works in every engine and is
+// narrower than 'self' (which in Chromium also reaches other artifacts and
+// /api), so it replaces 'self'. http and https both, since a TLS proxy may
+// sit in front of plain http. A Host header that can't be a source falls
+// back to 'self'.
+function servedHeaders(req, cap, slug) {
+  const host = String(req.headers.host || "");
+  const own = HOST.test(host)
+    ? `http://${host}/a/${cap}/${slug}/ https://${host}/a/${cap}/${slug}/`
+    : "'self'";
+  return {
+    ...BASE_HEADERS,
+    "content-security-policy":
+      `${SANDBOX}; default-src ${own} 'unsafe-inline' data: blob:; `
+      + `connect-src ${own}; img-src ${own} data: blob:; frame-ancestors 'self'`,
+  };
+}
 
 function notFound(req, res) {
   res.writeHead(404, { ...SECURITY_HEADERS, "content-type": "text/plain; charset=utf-8" });
@@ -54,7 +76,7 @@ async function handleArtifact(req, res, url) {
   const file = await resolveServed(slug, segments);
   if (!file) return notFound(req, res);
   const etag = `"${file.stat.size.toString(16)}-${Math.trunc(file.stat.mtimeMs).toString(16)}"`;
-  const headers = { ...SECURITY_HEADERS, etag, "content-type": file.contentType };
+  const headers = { ...servedHeaders(req, cap, slug), etag, "content-type": file.contentType };
   const match = req.headers["if-none-match"];
   if (match && match.split(",").some((value) => value.trim().replace(/^W\//, "") === etag)) {
     res.writeHead(304, headers);
