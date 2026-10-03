@@ -1,0 +1,94 @@
+/* Artifacts page: a main-area view over the content host, like Settings and
+   the panel view. The gallery scrolls; the viewer is a slim action bar over a
+   frame that fills the rest of the pane. */
+#artifacts-mode { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; background: var(--bg); overflow: hidden; }
+#artifacts-mode[hidden] { display: none !important; }
+#main.artifacts-active #term-wrap,
+#main.artifacts-active #chat-mode,
+#main.artifacts-active .mobile-composer-shell,
+#main.artifacts-active #quickkeys {
+  visibility: hidden;
+  pointer-events: none;
+}
+/* The connection badge describes a session; an artifact has none. */
+#main.artifacts-active #conn { display: none; }
+
+/* Footer entry: the panel-link look plus a count. */
+.artifacts-link { flex: none; }
+.artifacts-count {
+  min-width: 16px; padding: 0 5px; border-radius: 999px; background: var(--row-hover);
+  color: var(--muted); font: 600 10.5px/16px var(--font-ui); text-align: center;
+}
+.artifacts-count[hidden] { display: none; }
+
+/* Gallery */
+.art-gallery { flex: 1; min-height: 0; padding: 24px 32px 56px; overflow-y: auto; overscroll-behavior: contain; }
+.art-gallery[hidden] { display: none; }
+.art-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 14px; }
+.art-head h1 { margin: 0; color: var(--text); font: 600 18px var(--font-ui); letter-spacing: -.015em; }
+.art-status { margin: 0; color: var(--faint); font-size: 12px; }
+.art-status.is-error { color: var(--danger); }
+.art-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.art-filters[hidden] { display: none; }
+.art-chip {
+  min-height: 28px; max-width: 220px; padding: 0 12px; overflow: hidden; border: 1px solid var(--line);
+  border-radius: 999px; background: transparent; color: var(--muted); font-size: 12px;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.art-chip:hover { background: var(--row-hover); color: var(--text); }
+.art-chip[aria-pressed="true"] { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); background: var(--accent-soft); color: var(--text); font-weight: 600; }
+.art-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; margin: 0; padding: 0; list-style: none; }
+.art-grid[hidden] { display: none; }
+.art-card-item { min-width: 0; }
+.art-card {
+  display: flex; flex-direction: column; gap: 6px; width: 100%; height: 100%; min-height: 96px;
+  padding: 13px 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel);
+  color: var(--text); text-align: left;
+  transition: border-color .12s ease, background-color .12s ease;
+}
+.art-card:hover { border-color: var(--line-strong); background: color-mix(in srgb, var(--panel) 80%, var(--row-hover)); }
+.art-card-title { overflow: hidden; font-size: 13.5px; font-weight: 620; text-overflow: ellipsis; white-space: nowrap; }
+.art-card-desc {
+  display: -webkit-box; overflow: hidden; color: var(--muted); font-size: 12px; line-height: 1.5;
+  -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
+}
+.art-card-meta { display: flex; flex-wrap: wrap; gap: 2px 10px; margin-top: auto; color: var(--faint); font-size: 11px; }
+.art-card-project { max-width: 100%; overflow: hidden; font-family: var(--font-mono); font-size: 10.5px; text-overflow: ellipsis; white-space: nowrap; }
+.art-empty { max-width: 460px; margin: 48px auto 0; color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; }
+.art-empty[hidden] { display: none; }
+.art-empty h2 { margin: 0 0 8px; color: var(--text); font: 600 15px var(--font-ui); }
+.art-empty p { margin: 0 0 8px; }
+.art-empty-prompt { color: var(--text); font-style: italic; }
+.art-inline-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; }
+
+/* Viewer */
+.art-viewer { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.art-viewer[hidden] { display: none; }
+.art-viewer-head {
+  display: flex; flex: none; align-items: center; gap: 4px; min-width: 0; padding: 6px 10px;
+  border-bottom: 1px solid var(--line);
+}
+.art-viewer-title { flex: 1; min-width: 0; margin: 0 6px; overflow: hidden; color: var(--text); font: 600 13.5px var(--font-ui); text-overflow: ellipsis; white-space: nowrap; }
+.art-action {
+  display: inline-flex; flex: none; align-items: center; justify-content: center; gap: 6px; min-height: 30px;
+  padding: 4px 9px; color: var(--muted); font-size: 12px; text-decoration: none;
+}
+.art-action:hover { color: var(--text); }
+.art-action svg { flex: none; width: 15px; height: 15px; }
+.art-frames { position: relative; flex: 1; min-height: 0; }
+/* Pages that paint no background expect the browser's white canvas. */
+.art-frame { position: absolute; inset: 0; display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.art-frame[hidden] { display: none; }
+
+@media (max-width: 1099px) {
+  .art-gallery { padding: 16px 14px 40px; }
+  .art-action { min-width: 44px; min-height: 44px; }
+  .art-chip { min-height: 44px; padding: 0 14px; font-size: 13px; }
+  .art-viewer-head { padding: 0 6px; }
+}
+@media (max-width: 600px) {
+  .art-grid { grid-template-columns: minmax(0, 1fr); }
+  .art-action-label { display: none; }
+  .art-action { padding: 0; }
+  .art-empty { margin-top: 24px; }
+}

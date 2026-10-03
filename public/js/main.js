@@ -17,6 +17,7 @@ import { nextActivityBoundaryAt } from "./sidebar/index.js";
 import * as chat from "./chat.js";
 import * as ghost from "./ghost.js";
 import * as panels from "./panels.js";
+import * as artifacts from "./artifacts/index.js";
 import { wirePalette } from "./palette.js";
 import { wireSettings, renderSettings, showSettings, hideSettings, watchOmpUpdates } from "./settings/index.js";
 import { createVoiceController } from "./voice.js";
@@ -44,10 +45,10 @@ let refreshing = false;
 
 // Ghost detail: a dead session previewed in the main pane. Selecting a ghost
 // is mutually exclusive with a live session — the terminal and chat poll both
-// A panel view and the Settings page park the session the same way, so one
-// exit serves all three.
+// A panel view, the Artifacts page and the Settings page park the session the
+// same way, so one exit serves all four.
 function clearPreviewView() {
-  if (!state.selectedGhost && !state.openPanel && !state.settingsOpen
+  if (!state.selectedGhost && !state.openPanel && !state.settingsOpen && !state.artifactsOpen
     && !el.main.classList.contains("ghost-active") && !el.main.classList.contains("panel-active")) return;
   state.selectedGhost = null;
   state.openPanel = null;
@@ -55,6 +56,7 @@ function clearPreviewView() {
   ghost.hideGhost();
   panels.hidePanel();
   hideSettings();
+  leaveArtifacts();
   applyMode(state.mode);
   // The parked live entry survived the preview (socket + buffer intact):
   // resume its host, header and scrubber with no replay, or fall back to
@@ -68,6 +70,12 @@ function clearPreviewView() {
   el["mode-toggle"].hidden = resumed?.type === "shell";
   emit("sidebar:rerender");
 }
+
+function leaveArtifacts() {
+  state.artifactsOpen = false;
+  state.openArtifact = null;
+  artifacts.hideArtifacts();
+}
 function selectGhost(id) {
   const item = state.restorable.find((g) => g.id === id);
   if (!item) return;
@@ -77,6 +85,7 @@ function selectGhost(id) {
   panels.hidePanel();
   state.settingsOpen = false;
   hideSettings();
+  leaveArtifacts();
   closeFileViewer();
   chat.resetChat();
   // Park the live session: socket + buffer survive, chrome hides, current
@@ -112,6 +121,7 @@ function selectPanel(id) {
   ghost.hideGhost();
   state.settingsOpen = false;
   hideSettings();
+  leaveArtifacts();
   closeFileViewer();
   chat.resetChat();
   terminal.parkCurrent();
@@ -127,23 +137,54 @@ function selectPanel(id) {
 }
 
 // Settings is a page in the main pane, parked over the session like a panel.
-function selectSettings() {
+function selectSettings(section) {
   state.selectedGhost = null;
   ghost.hideGhost();
   state.openPanel = null;
   panels.hidePanel();
+  leaveArtifacts();
   closeFileViewer();
   chat.resetChat();
   terminal.parkCurrent();
   activateQuickkeysSession(null);
   state.settingsOpen = true;
   chat.setComposerEnabled(false);
-  if (!showSettings()) {
+  if (!showSettings(section)) {
     // A tab on a cached shell from before the page shipped has no
     // #settings-mode; surface the reload prompt instead of a dead pane.
     el["update-btn"].hidden = false;
   }
   el["term-title"].textContent = "Settings";
+  el["term-title"].title = "";
+  el["mode-toggle"].hidden = true;
+  if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
+  emit("sidebar:rerender");
+}
+
+// Artifacts: the gallery (slug null) or one artifact's viewer, parked over the
+// session like Settings. Gallery and viewer are one page, so moving between
+// them never re-parks anything.
+function selectArtifacts(slug = null) {
+  if (slug && !artifacts.findArtifact(slug)) return;
+  state.selectedGhost = null;
+  ghost.hideGhost();
+  state.openPanel = null;
+  panels.hidePanel();
+  state.settingsOpen = false;
+  hideSettings();
+  closeFileViewer();
+  chat.resetChat();
+  terminal.parkCurrent();
+  activateQuickkeysSession(null);
+  state.artifactsOpen = true;
+  state.openArtifact = slug;
+  chat.setComposerEnabled(false);
+  if (!artifacts.showArtifacts()) {
+    state.artifactsOpen = false;
+    state.openArtifact = null;
+    el["update-btn"].hidden = false;
+  }
+  el["term-title"].textContent = "Artifacts";
   el["term-title"].title = "";
   el["mode-toggle"].hidden = true;
   if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
@@ -261,7 +302,7 @@ async function checkFrontendVersion() {
 // the session is gone, so the saved id must survive until a real list arrives.
 let restorePending = true;
 function restoreSavedSession() {
-  if (state.current || state.selectedGhost || state.openPanel || state.settingsOpen) {
+  if (state.current || state.selectedGhost || state.openPanel || state.settingsOpen || state.artifactsOpen) {
     restorePending = false;
     return;
   }
@@ -330,6 +371,8 @@ async function boot() {
     state.selectedFolder = state.selectedFolder || state.meta.workspaceRoot;
     renderSettings();
     panels.renderPanelNav();
+    // The footer count; the list itself refreshes whenever the page opens.
+    void artifacts.loadArtifacts();
     // Only after the token proved good: an unauthenticated check would raise
     // the auth gate a second time.
     watchOmpUpdates();
@@ -622,6 +665,7 @@ activateQuickkeysSession(null);
 wireUsage();
 wirePalette();
 wireSettings();
+artifacts.wireArtifacts();
 wireProfileInfo();
 wireNotifications();
 chat.wireComposer({ voice });
@@ -804,7 +848,8 @@ get("session:forget", (id) => forgetGhost(id));
 get("session:delete", (id) => deleteSession(id));
 get("ghost:select", (id) => selectGhost(id));
 get("panel:open", (id) => selectPanel(id));
-get("settings:open", () => selectSettings());
+get("settings:open", (section) => selectSettings(section));
+get("artifacts:open", (slug) => selectArtifacts(slug));
 get("sessions:refresh", () => refresh());
 get("panels:saved", ({ changed } = {}) => {
   panels.dropFrames(changed || []);

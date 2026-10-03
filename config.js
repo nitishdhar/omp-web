@@ -71,6 +71,20 @@ const config = {
     process.env.OMP_WEB_ATTACHMENTS_DIR || path.join(OWP_DIR, "attachments"),
   ),
 
+  // Static pages agents build and keep updated (api/artifact-store.js). The
+  // key signs their capability links; it is separate from the access token so
+  // links survive a token change and work with auth off. Deleting it revokes
+  // every link.
+  artifactsDir: path.resolve(
+    process.env.OMP_WEB_ARTIFACTS_DIR || path.join(OWP_DIR, "artifacts"),
+  ),
+  artifactsKeyFile: path.join(OWP_DIR, "artifacts.key"),
+  // Bundled skills are copied here on start so a profile's
+  // skills.customDirectories keeps a path that survives package upgrades.
+  skillsDir: path.join(OWP_DIR, "skills"),
+  // Public origin of this console (e.g. https://console.example), used only
+  // to print absolute artifact links from the CLI.
+  publicUrl: (process.env.OMP_WEB_PUBLIC_URL || "").trim().replace(/\/+$/, ""),
 
   // Voice input transcription. The browser records audio and POSTs it to
   // /api/transcribe; the server forwards it to this OpenAI-compatible

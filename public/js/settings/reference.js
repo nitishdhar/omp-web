@@ -5,7 +5,8 @@
 // Profiles are read-only on purpose: they live in
 // ~/.omp/profiles/<name>/agent/config.yml and native OMP owns them. A web
 // console editing those files is how a config silently diverges from what OMP
-// believes about itself.
+// believes about itself. The Artifacts skill switch (skills.js) is the one
+// exception, and it writes through `omp config set`, never the file.
 
 import { el, elem } from "../dom.js";
 import { state } from "../state.js";
@@ -15,7 +16,7 @@ function profileRows() {
   const details = state.meta?.profileDetails || [];
   if (!details.length) return [elem("p", { class: "set-note" }, "No profiles reported yet.")];
   return details.map((profile) => {
-    const card = elem("div", { class: "set-profile" });
+    const card = elem("div", { class: "set-profile", "data-profile": profile.name });
     card.append(elem("div", { class: "set-profile-name" }, profile.name));
     const roles = profile.roles || [];
     if (!roles.length) {

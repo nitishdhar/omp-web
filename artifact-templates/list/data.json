@@ -1,0 +1,35 @@
+{
+  "title": "To-do",
+  "updatedAt": "",
+  "sections": [
+    {
+      "title": "Today",
+      "items": [
+        {
+          "text": "Reply to the venue about the booking",
+          "detail": "They asked for a headcount by Friday.",
+          "due": "2026-01-09",
+          "tag": "email"
+        },
+        {
+          "text": "Read the onboarding guide",
+          "link": "https://example.com/guide",
+          "tag": "reading"
+        },
+        {
+          "text": "Renew the parking permit",
+          "done": true
+        }
+      ]
+    },
+    {
+      "title": "Later",
+      "items": [
+        {
+          "text": "Plan the spring trip",
+          "detail": "Compare two weekends."
+        }
+      ]
+    }
+  ]
+}

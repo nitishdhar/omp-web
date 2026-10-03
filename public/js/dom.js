@@ -50,6 +50,10 @@ export function initDom() {
     "ghost-mode", "ghost-title", "ghost-summary", "ghost-meta",
     "ghost-back-btn", "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn", "ghost-delete-btn",
     "panel-nav", "panel-mode",
+    "artifacts-btn", "artifacts-count", "artifacts-mode", "artifacts-gallery", "artifacts-status",
+    "artifacts-filters", "artifacts-list", "artifacts-empty", "artifacts-empty-settings",
+    "artifact-viewer", "artifact-back", "artifact-title", "artifact-reload", "artifact-open",
+    "artifact-copy", "artifact-frames",
   ].forEach(reg);
 }
 

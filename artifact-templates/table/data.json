@@ -1,0 +1,35 @@
+{
+  "title": "Table",
+  "updatedAt": "",
+  "columns": [
+    {
+      "key": "name",
+      "label": "Name"
+    },
+    {
+      "key": "status",
+      "label": "Status"
+    },
+    {
+      "key": "owner",
+      "label": "Owner"
+    }
+  ],
+  "rows": [
+    {
+      "name": "Website refresh",
+      "status": "In progress",
+      "owner": "Sam"
+    },
+    {
+      "name": "Quarterly report",
+      "status": "Blocked",
+      "owner": "Alex"
+    },
+    {
+      "name": "Team offsite",
+      "status": "Done",
+      "owner": "Priya"
+    }
+  ]
+}

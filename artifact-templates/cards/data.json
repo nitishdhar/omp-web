@@ -1,0 +1,21 @@
+{
+  "title": "Cards",
+  "updatedAt": "",
+  "cards": [
+    {
+      "title": "Release notes",
+      "body": "Three fixes and one new setting shipped this week.",
+      "meta": "Engineering"
+    },
+    {
+      "title": "Reading list",
+      "body": "A short article worth keeping.",
+      "meta": "Reading",
+      "link": "https://example.com/article"
+    },
+    {
+      "title": "Next steps",
+      "body": "Review open items on Monday."
+    }
+  ]
+}
