@@ -142,56 +142,6 @@
   .pal-row { min-height: 44px; }
 }
 
-/* Settings sheet. Wider than a dialog because the profile list is reference
-   material, not a form. */
-.settings-card { width: 520px; }
-.set-group { margin-bottom: 20px; }
-.set-group:last-of-type { margin-bottom: 14px; }
-.set-group h3 {
-  margin: 0 0 9px; color: var(--faint); font: 650 10.5px var(--font-ui);
-  letter-spacing: .06em; text-transform: uppercase;
-}
-.set-row {
-  display: flex; align-items: center; gap: 14px; padding: 11px 12px;
-  border: 1px solid var(--line); border-radius: 9px; background: var(--bg);
-}
-.set-copy { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.set-copy strong { font-size: 13px; font-weight: 620; }
-.set-copy span { color: var(--muted); font-size: 11.5px; line-height: 1.5; }
-.set-row .icon-action { flex: none; border: 1px solid var(--line); border-radius: 8px; }
-.set-row .icon-action:hover { border-color: var(--line-strong); }
-.set-profiles { display: flex; flex-direction: column; gap: 8px; }
-.set-profile { padding: 11px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); }
-.set-profile-name { margin-bottom: 7px; font: 620 12.5px var(--font-mono); }
-.set-roles {
-  display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 3px 14px; margin: 0;
-}
-.set-roles dt { color: var(--faint); font: 11px var(--font-ui); }
-.set-roles dd {
-  margin: 0; min-width: 0; overflow: hidden; color: var(--muted);
-  font: 11px var(--font-mono); text-overflow: ellipsis; white-space: nowrap;
-}
-.set-legend { display: grid; gap: 6px; font-size: 12.5px; color: var(--muted); }
-.set-legend > div { display: flex; align-items: center; gap: 8px; }
-.set-legend .dot { flex: none; }
-.set-note { margin: 9px 0 0; color: var(--faint); font-size: 11.5px; line-height: 1.55; }
-.set-note code { font-family: var(--font-mono); font-size: 10.5px; color: var(--muted); }
-.set-note-lead { margin: 0 0 8px; }
-.set-roots { display: grid; gap: 2px; margin: 0 0 8px; padding: 0; list-style: none; }
-.set-roots[hidden] { display: none; }
-.set-root { display: flex; align-items: center; gap: 8px; min-height: 30px; padding: 0 2px 0 8px; border-radius: 6px; background: var(--panel-2); }
-.set-root-path { flex: 1; min-width: 0; overflow: hidden; color: var(--text); font: 11.5px var(--font-mono); text-overflow: ellipsis; white-space: nowrap; }
-.set-root-remove { flex: none; width: 28px; height: 28px; padding: 0; color: var(--faint); font-size: 16px; line-height: 1; }
-.set-root-remove:hover { color: var(--danger); }
-.set-root-form button { flex: none; min-height: 32px; padding: 0 12px; font-size: 12.5px; }
-.set-root-form { display: flex; gap: 6px; }
-.set-root-form input { flex: 1; min-width: 0; min-height: 32px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); color: var(--text); font: 12px var(--font-mono); }
-.set-root-form input:focus { outline: 0; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: var(--focus-ring); }
-@media (max-width: 1099px) {
-  .set-root-remove { width: 40px; height: 40px; }
-  .set-root-form input, .set-root-form button { min-height: 44px; }
-  .set-root-form input { font-size: 16px; }
-}
 /* Checkbox rows (e.g. keep-my-name): inline box, not the full-width field. */
 .modal-card label.check { display: flex; align-items: center; gap: 9px; }
 .modal-card label.check input { display: inline-block; width: auto; min-height: 0; margin-top: 0; accent-color: var(--accent); }

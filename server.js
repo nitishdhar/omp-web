@@ -29,7 +29,8 @@ try {
   console.error("omp-web: workspace directory is unavailable. Run setup or set OMP_WEB_WORKSPACE to an existing directory.");
   process.exit(1);
 }
-const { configurePanels, handlePanel } = require("./api/panels");
+const { configurePanels } = require("./api/panel-config");
+const { handlePanel } = require("./api/panels");
 try {
   configurePanels(config.panels);
 } catch (error) {

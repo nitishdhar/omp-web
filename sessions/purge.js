@@ -24,9 +24,11 @@ function dataDirs(id) {
 }
 
 // Bounded walk: lstat only, so a link inside counts as the link itself.
+// newestMs dates data no live or registry record describes (Storage page).
 function measure(target) {
   let bytes = 0;
   let files = 0;
+  let newestMs = 0;
   const stack = [target];
   while (stack.length) {
     const current = stack.pop();
@@ -39,9 +41,10 @@ function measure(target) {
     } else {
       bytes += stat.size;
       files += 1;
+      if (stat.mtimeMs > newestMs) newestMs = stat.mtimeMs;
     }
   }
-  return { bytes, files };
+  return { bytes, files, newestMs };
 }
 
 /** What Delete would remove, per directory. */
@@ -54,6 +57,7 @@ function footprint(id) {
   return {
     bytes: parts.reduce((sum, part) => sum + part.bytes, 0),
     files: parts.reduce((sum, part) => sum + part.files, 0),
+    newestMs: parts.reduce((max, part) => Math.max(max, part.newestMs), 0),
     parts,
   };
 }

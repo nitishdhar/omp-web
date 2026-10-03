@@ -23,6 +23,7 @@ const registry = require("./registry");
 const purgeData = require("./sessions/purge");
 const { listFolders } = require("./api/util");
 const runner = require("./sessions/runner");
+const { timerMinutes } = require("./api/runtime-settings");
 
 // Thin wrapper around a dedicated tmux server (socket `config.tmuxSocket`).
 // tmux is the source of truth for session liveness; per-session metadata
@@ -59,6 +60,7 @@ const SESSION_FORMAT = [
   "#{@omp_title_lock}",
   "#{@omp_runner}",
   "#{@omp_ui}",
+  "#{pane_pid}",
 ].join("\t");
 const SESSION_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const BOOTSTRAP_MARK = String(process.pid);
@@ -184,7 +186,7 @@ function paneCommandFor(id, runnerName, args) {
   if (runnerName === "rpc") {
     return runner.rpcPaneCommand([
       ...ompEnv(id),
-      `OMP_WEB_RPC_IDLE_MINUTES=${config.rpcIdleMinutes}`,
+      `OMP_WEB_RPC_IDLE_MINUTES=${timerMinutes("rpcIdleMinutes")}`,
       process.execPath, runner.BRIDGE, runner.socketPath(id), "--",
       config.ompBin, "--mode", "rpc-ui", "--no-ui", ...args,
     ]);
@@ -312,7 +314,7 @@ function sessionFromLine(line) {
     name, folder, profile, type, rawStatus, rawStatusAt, rawRuntimeActivity,
     paneCommand, title, created, attached, windows, sessionActivity, pinned, source,
     rawThinking, rawThinkingAt, rawLaunchModel, rawLaunchedAt, rawNoTitle, rawTitleLock,
-    rawRunner, rawUi,
+    rawRunner, rawUi, rawPanePid,
   ] = line.split("\t");
   const id = name.slice(config.sessionPrefix.length);
   const sessionProfile = profile || "default";
@@ -380,6 +382,8 @@ function sessionFromLine(line) {
     launchedAt: Number(rawLaunchedAt) || 0,
     runner: sessionRunner,
     ui,
+    // Root of the pane's process tree; api/stats.js attributes memory by it.
+    panePid: Number(rawPanePid) || 0,
   };
 }
 
@@ -1168,6 +1172,29 @@ function setRunner(id, targetRunner, options = {}) {
   return enqueueSessionOperation(id, () => setRunnerNow(id, targetRunner, options));
 }
 
+// After an omp binary update, so a settled session runs the new binary: rpc
+// stops the bridge (the next send relaunches it, nothing stays in memory);
+// tui relaunches in place exactly like opening Terminal: same profile,
+// resuming its own transcript and therefore its model. A profile reload would
+// impose the profile's default model and refuses a session with no
+// transcript yet. Busy is re-checked here, inside the queue, because a turn
+// may have started since the caller listed the session.
+async function restartOmpNow(id) {
+  const session = await requireAgentSession(id);
+  if (BUSY_STATUSES.has(session.status)) return { restarted: false, reason: "busy" };
+  if (session.runner === "rpc") {
+    await stopBridge(id);
+    await waitForBridgeExit(id);
+  } else {
+    await launchAgent(id, "tui", session.folder || config.workspaceRoot, await agentLaunchArgs(id, session));
+  }
+  return { restarted: true };
+}
+
+function restartOmp(id) {
+  return enqueueSessionOperation(id, () => restartOmpNow(id));
+}
+
 function answer(id, reply = {}) {
   const payload = { op: "answer", requestId: reply.requestId };
   if (typeof reply.requestId !== "string" || !reply.requestId || reply.requestId.length > 128) {
@@ -1583,5 +1610,5 @@ module.exports = {
   list, get, exists, create, setPinned, renameTitle, scroll, scrollState, setScrollPosition,
   kill, reloadProfile, tmuxName, tmuxPane, resolvePane, bootstrap, OPT_KEYS,
   sendText, sendKeys, answer, setRuntimeModel, setRunner, configuredEffortFor, contextWindowFor,
-  launchIdentityFor, restorable, restore, forgetGhost, footprint, purge,
+  launchIdentityFor, restorable, restore, forgetGhost, footprint, purge, restartOmp,
 };

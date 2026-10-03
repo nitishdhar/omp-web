@@ -239,11 +239,11 @@ both take precedence over the application default.
 | `OMP_WEB_ATTACHMENTS_DIR` | `<OMP_WEB_HOME>/attachments` | Private, per-session uploaded-attachment directory. |
 | `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux socket label. |
-| `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Minutes a Chat session's headless `omp` stays up after it settles before it exits. The next message starts it again. |
-| `OMP_WEB_TUI_IDLE_MINUTES` | `30` | Minutes an idle Terminal (TUI) session with no open terminal waits before it is handed back to the headless Chat runner. |
+| `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Minutes a Chat session's headless `omp` stays up after it settles before it exits. The next message starts it again. Also settable in Settings → Sessions & memory (1–1440); when this variable is set it wins and Settings shows it locked. |
+| `OMP_WEB_TUI_IDLE_MINUTES` | `30` | Minutes an idle Terminal (TUI) session with no open terminal waits before it is handed back to the headless Chat runner. Also settable in Settings → Sessions & memory (5–1440); when this variable is set it wins and Settings shows it locked. |
 | `OMP_WEB_TOKEN` | empty | Access token. When set, HTTP and WebSocket endpoints require it; `setup --token` creates the file instead. Keep it private; do not commit or share it. |
 | `OMP_WEB_ALLOW_OPEN` | empty | Set to `1` to run with no access token on a non-loopback bind. Accepts that anyone reaching the port controls the sessions; the server refuses open LAN binds without it. |
-| `OMP_WEB_PANELS` | empty | JSON array of local web apps to show inside omp-web. See [Panels](#panels). |
+| `OMP_WEB_PANELS` | empty | JSON array of local web apps to show inside omp-web. Panels can also be added in Settings; panels from this variable are locked there. See [Panels](#panels). |
 | `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
 | `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this machine and sent only to the configured transcription service. |
 | `OMP_WEB_TRANSCRIBE_MODEL` | empty | Transcription model name. |
@@ -268,19 +268,33 @@ omp-web; omp-web forwards it to the configured OpenAI-compatible
 browser. Add those variables to the private `OMP_WEB_HOME/env` file or provide
 them through the process environment, then restart the foreground server.
 
+**Updating omp.** Settings → OMP shows the installed and latest omp version
+(`omp update --check`, cached for six hours) and can update omp on the host:
+it runs `omp update` as the user the omp-web server runs as, using whatever
+install method omp detects. Nothing updates on its own; only the button runs
+it. Running sessions keep the old binary until restarted, so **Reload
+profiles** then refreshes every profile's model catalog
+(`omp --profile=<name> models refresh`) and restarts idle sessions still on the
+old version; busy ones are skipped.
+
 ### Panels
 
 A panel shows a local web app inside omp-web: it gets an entry in the sidebar
 footer and opens in the main pane, served through omp-web at `/panels/<id>/`.
 List panels in `OMP_WEB_PANELS` (environment or `OMP_WEB_HOME/env`) and
-restart the server:
+restart the server, or add them in **Settings → Panels**, which applies on save
+without a restart:
 
 ```sh
 OMP_WEB_PANELS='[{"id":"example","label":"Example","url":"http://127.0.0.1:8090"}]'
 ```
 
 `id` is 1–40 characters of `a-z`, `0-9` and `-`, unique; `label` is up to 40
-characters. An invalid entry stops startup with a message naming it.
+characters. An invalid `OMP_WEB_PANELS` entry stops startup with a message
+naming it. Panels from the variable come first and cannot be edited or
+shadowed in Settings; Settings-added panels (at most 20) are stored in
+`OMP_WEB_HOME/settings.json`, and an invalid stored entry is skipped with a
+warning rather than stopping startup.
 
 The contract a panel app can rely on:
 

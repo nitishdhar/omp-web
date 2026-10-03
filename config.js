@@ -98,21 +98,13 @@ const config = {
   allowOpen: process.env.OMP_WEB_ALLOW_OPEN === "1",
 
   // Operator-configured panels: a JSON array of {id, label, url} naming local
-  // web apps to show inside omp-web. Validated at startup by api/panels.js.
+  // web apps to show inside omp-web. Validated at startup by
+  // api/panel-config.js; more can be added in Settings.
   panels: process.env.OMP_WEB_PANELS || "",
 
-  // An rpc session's omp exits after this long settled with no Chat request;
-  // the next send starts it again.
-  rpcIdleMinutes: positiveMinutes("OMP_WEB_RPC_IDLE_MINUTES", 10),
-  // A TUI session nobody has looked at for this long is switched back to the
-  // rpc runner, which ends its idle omp process.
-  tuiIdleMinutes: positiveMinutes("OMP_WEB_TUI_IDLE_MINUTES", 30),
+  // The idle timers (OMP_WEB_RPC_IDLE_MINUTES, OMP_WEB_TUI_IDLE_MINUTES) are
+  // resolved per use by api/runtime-settings.js: Settings can change them.
 };
-
-function positiveMinutes(name, fallback) {
-  const value = Number(process.env[name]);
-  return Number.isFinite(value) && value > 0 ? value : fallback;
-}
 
 // Preserve a user's configured PATH order. Only append common locations that
 // are absent so thin process-manager environments can still find tools.

@@ -1,5 +1,5 @@
 "use strict";
-// Panel view: operator-configured local web apps (OMP_WEB_PANELS) shown in the
+// Panel view: operator-configured local web apps (OMP_WEB_PANELS or Settings) shown in the
 // main pane through the server's /panels/<id>/ proxy. Main.js owns when to
 // show/hide; this module paints the sidebar entries and the frames.
 
@@ -77,4 +77,15 @@ export function hidePanel() {
   if (el["panel-mode"]) el["panel-mode"].hidden = true;
   el.main.classList.remove("panel-active");
   syncPanelNav();
+}
+
+// A frame keeps the app it first loaded; after a panel is removed or
+// re-pointed in Settings, the next open must load the new target.
+export function dropFrames(ids) {
+  for (const id of ids) {
+    const frame = frames.get(id);
+    if (!frame) continue;
+    frame.remove();
+    frames.delete(id);
+  }
 }

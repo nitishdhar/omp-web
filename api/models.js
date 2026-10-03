@@ -117,4 +117,9 @@ async function switchModel(id, { model, effort } = {}) {
   return { model: entry.selector, effort: level };
 }
 
-module.exports = { listModels, switchModel };
+// After `models refresh` (Settings → OMP reload) the cached catalogs are stale.
+function clearModelCache() {
+  cache.clear();
+}
+
+module.exports = { listModels, switchModel, clearModelCache };

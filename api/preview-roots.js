@@ -12,6 +12,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const config = require("../config");
+const { getSetting, setSetting } = require("./settings-store");
 
 const MAX_ROOTS = 20;
 const CREDENTIAL_NAME = /(?:^|[^a-z])(?:o?auth|credentials?|secrets?|tokens?|passwords?|api[-_]?keys?)(?:[^a-z]|$)/i;
@@ -24,17 +25,8 @@ function codedError(code, message) {
   return error;
 }
 
-function readSettings() {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(config.settingsFile, "utf8"));
-    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
 function listPreviewRoots() {
-  const roots = readSettings().previewRoots;
+  const roots = getSetting("previewRoots");
   return Array.isArray(roots)
     ? roots.filter((root) => typeof root === "string" && path.isAbsolute(root))
     : [];
@@ -84,12 +76,7 @@ async function setPreviewRoots(input) {
     const real = await validateRoot(raw);
     if (!roots.includes(real)) roots.push(real);
   }
-  const next = { ...readSettings(), previewRoots: roots };
-  await fs.promises.mkdir(path.dirname(config.settingsFile), { recursive: true, mode: 0o700 });
-  const temp = `${config.settingsFile}.${process.pid}.tmp`;
-  await fs.promises.writeFile(temp, JSON.stringify(next, null, 2) + "\n", { mode: 0o600 });
-  await fs.promises.rename(temp, config.settingsFile);
-  return roots;
+  return setSetting("previewRoots", roots);
 }
 
 /** Credential-shaped paths are refused inside an extra root even when allowed by type. */
