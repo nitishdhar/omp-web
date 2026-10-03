@@ -1,14 +1,11 @@
 "use strict";
 // Settings → General → Addresses: every address the server answers on
 // (GET /api/settings/addresses), which one links use, and the editable public
-// address. Read-only apart from the public address, which an
-// OMP_WEB_PUBLIC_URL environment value locks.
+// address, which is set only here.
 
 import { el, elem } from "../dom.js";
 import { api } from "../api.js";
 import { copyWithNotice, showNotice } from "../notice.js";
-
-const DEFAULT_NOTE = "The address a reverse proxy or Tailscale Serve publishes. Leave empty to clear.";
 
 let status = null; // last /api/settings/addresses reply
 
@@ -42,17 +39,10 @@ function paint() {
     rows.push(addressRow({ label: "Bind address", url: status.linkBase, reachable: true }));
   }
   el["settings-addresses"].replaceChildren(...rows);
-  const pub = status.publicUrl || {};
   const input = el["settings-public-url"];
-  const locked = pub.source === "env";
   // A reply landing while the user types must not overwrite their text.
-  if (document.activeElement !== input) input.value = pub.value || "";
-  input.disabled = locked;
-  el["settings-public-save"].disabled = locked;
-  const note = el["settings-public-note"];
-  note.classList.toggle("is-error", Boolean(pub.error));
-  if (pub.error) note.textContent = pub.error;
-  else note.textContent = locked ? "Locked · set by OMP_WEB_PUBLIC_URL" : DEFAULT_NOTE;
+  if (document.activeElement !== input) input.value = status.publicUrl || "";
+  el["settings-public-save"].disabled = false;
 }
 
 async function load() {
@@ -77,7 +67,7 @@ async function save() {
     });
     el["settings-public-url"].blur();
     paint();
-    showNotice(status.publicUrl.value ? "Public address saved" : "Public address cleared");
+    showNotice(status.publicUrl ? "Public address saved" : "Public address cleared");
   } catch (error) {
     showNotice(error.message || "Could not save the public address", { tone: "error" });
     button.disabled = false;

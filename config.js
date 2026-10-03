@@ -79,12 +79,9 @@ const config = {
     process.env.OMP_WEB_ARTIFACTS_DIR || path.join(OWP_DIR, "artifacts"),
   ),
   artifactsKeyFile: path.join(OWP_DIR, "artifacts.key"),
-  // Bundled skills are copied here on start so a profile's
-  // skills.customDirectories keeps a path that survives package upgrades.
+  // Bundled skills are copied here so the ~/.agents/skills link
+  // (api/install-links.js) points at a path that survives package upgrades.
   skillsDir: path.join(OWP_DIR, "skills"),
-  // Public origin of this console (e.g. https://console.example). Set here it
-  // wins over Settings; api/addresses.js puts it first for absolute links.
-  publicUrl: (process.env.OMP_WEB_PUBLIC_URL || "").trim().replace(/\/+$/, ""),
 
   // Voice input transcription. The browser records audio and POSTs it to
   // /api/transcribe; the server forwards it to this OpenAI-compatible
