@@ -1,19 +1,15 @@
 "use strict";
-// Settings sheet. Consolidates the preferences that were scattered across the
-// header's overflow, and gives profile visibility a home.
+// Read-only Settings sections painted from /api/meta: the status legend
+// (General), Profiles and About.
 //
 // Profiles are read-only on purpose: they live in
 // ~/.omp/profiles/<name>/agent/config.yml and native OMP owns them. A web
 // console editing those files is how a config silently diverges from what OMP
-// believes about itself. omp-web's own preferences (viewer folders) are
-// editable because omp-web is their only owner.
+// believes about itself.
 
-import { el, elem } from "./dom.js";
-import { state } from "./state.js";
-import { statusLabel } from "./session-status.js";
-import { loadPreviewRoots, wirePreviewRoots } from "./preview-roots.js";
-
-let wired = false;
+import { el, elem } from "../dom.js";
+import { state } from "../state.js";
+import { statusLabel } from "../session-status.js";
 
 function profileRows() {
   const details = state.meta?.profileDetails || [];
@@ -68,42 +64,8 @@ function legendRows() {
   return rows;
 }
 
-export function renderSettings() {
-  const profiles = el["settings-profiles"];
-  const about = el["settings-about"];
-  const legend = el["settings-legend"];
-  if (profiles) profiles.replaceChildren(...profileRows());
-  if (legend) legend.replaceChildren(...legendRows());
-  if (about) about.replaceChildren(aboutRows());
-}
-
-export function openSettings() {
-  const host = el.settings;
-  if (!host) return;
-  renderSettings();
-  void loadPreviewRoots();
-  host.hidden = false;
-  el["settings-close"]?.focus();
-}
-
-export function closeSettings() {
-  const host = el.settings;
-  if (host) host.hidden = true;
-}
-
-export function wireSettings() {
-  if (wired) return;
-  const host = el.settings;
-  const open = el["settings-btn"];
-  if (!host || !open) return;
-  wired = true;
-  open.onclick = () => openSettings();
-  wirePreviewRoots();
-  el["settings-close"].onclick = () => closeSettings();
-  host.addEventListener("mousedown", (event) => {
-    if (event.target === host) closeSettings();
-  });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !host.hidden) closeSettings();
-  });
+export function renderReference() {
+  el["settings-profiles"]?.replaceChildren(...profileRows());
+  el["settings-legend"]?.replaceChildren(...legendRows());
+  el["settings-about"]?.replaceChildren(aboutRows());
 }

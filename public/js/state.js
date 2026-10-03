@@ -14,6 +14,7 @@ export const state = {
   restorable: [],
   selectedGhost: null, // ghost id with its detail view open in the main pane
   openPanel: null, // operator-configured panel id shown in the main pane
+  settingsOpen: false, // the Settings page is shown in the main pane
   current: null, // active session id
   sockets: new Map(), // id -> ws (one open socket per pooled entry, LRU-capped)
   selectedFolder: "",

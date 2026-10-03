@@ -1,18 +1,12 @@
 "use strict";
-// Operator-configured panels: local web apps shown inside omp-web through a
-// reverse proxy at /panels/<id>/. Nothing here knows about any specific app;
-// the operator lists them in OMP_WEB_PANELS.
+// Panels: local web apps shown inside omp-web through a reverse proxy at
+// /panels/<id>/. Nothing here knows about any specific app; which panels
+// exist is api/panel-config.js's job.
 const http = require("http");
 const crypto = require("crypto");
 const config = require("../config");
+const { panelById } = require("./panel-config");
 
-const PANEL_ID = /^[a-z0-9-]+$/;
-const FIELD_MAX = 40;
-// Loopback only, origin only: a path, query, or credentials in the URL would
-// make the mount point ambiguous, and any other host turns omp-web into an
-// open relay onto the network.
-const PANEL_URL = /^http:\/\/(127\.0\.0\.1|localhost):([1-9][0-9]{0,4})\/?$/;
-const CONTROL_CHARS = /[\u0000-\u001f\u007f-\u009f]/;
 const CONNECT_TIMEOUT_MS = 30_000;
 const AUTH_COOKIE = "omp_web_panel";
 const HOP_BY_HOP = new Set([
@@ -20,7 +14,6 @@ const HOP_BY_HOP = new Set([
   "te", "trailer", "transfer-encoding", "upgrade",
 ]);
 
-const panels = new Map(); // id -> { id, label, hostname, port, host }
 // Panel subrequests (scripts, CSS, fetches from the app's own code) cannot
 // carry the token header, so they authenticate with a cookie derived from the
 // token. Derived, not the token itself: a leaked panel cookie never unlocks
@@ -29,51 +22,6 @@ const cookieValue = config.token
   ? crypto.createHmac("sha256", config.token).update("omp-web-panels:v1").digest("hex")
   : "";
 const agent = new http.Agent({ keepAlive: true });
-
-function parsePanels(raw) {
-  if (!raw || !raw.trim()) return [];
-  let list;
-  try {
-    list = JSON.parse(raw);
-  } catch (error) {
-    throw new Error(`OMP_WEB_PANELS is not valid JSON (${error.message}).`);
-  }
-  if (!Array.isArray(list)) throw new Error("OMP_WEB_PANELS must be a JSON array of {\"id\",\"label\",\"url\"} objects.");
-  const seen = new Set();
-  return list.map((entry, index) => {
-    const name = `OMP_WEB_PANELS entry ${index + 1}`;
-    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
-      throw new Error(`${name} must be an object with "id", "label" and "url".`);
-    }
-    const { id, label, url } = entry;
-    const where = typeof id === "string" && id ? `${name} ("${id}")` : name;
-    if (typeof id !== "string" || !PANEL_ID.test(id) || id.length > FIELD_MAX) {
-      throw new Error(`${where}: "id" must be 1-${FIELD_MAX} characters of a-z, 0-9 or "-".`);
-    }
-    if (seen.has(id)) throw new Error(`${where}: "id" is used by an earlier entry; ids must be unique.`);
-    seen.add(id);
-    if (typeof label !== "string" || !label.trim() || label.length > FIELD_MAX || CONTROL_CHARS.test(label)) {
-      throw new Error(`${where}: "label" must be a non-empty string of at most ${FIELD_MAX} characters without control characters.`);
-    }
-    const match = typeof url === "string" ? url.match(PANEL_URL) : null;
-    const port = match ? Number(match[2]) : 0;
-    if (!match || port > 65535) {
-      throw new Error(`${where}: "url" must be exactly http://127.0.0.1:<port> or http://localhost:<port> (no path, query, credentials or https).`);
-    }
-    return { id, label, hostname: match[1], port, host: `${match[1]}:${port}` };
-  });
-}
-
-// Throws with an operator-facing message; server.js turns it into exit(1).
-function configurePanels(raw) {
-  panels.clear();
-  for (const panel of parsePanels(raw)) panels.set(panel.id, panel);
-}
-
-// The browser needs only what it renders; the upstream URL stays server-side.
-function publicPanels() {
-  return [...panels.values()].map(({ id, label }) => ({ id, label }));
-}
 
 function safeEqual(a, b) {
   const left = Buffer.from(String(a));
@@ -195,7 +143,7 @@ function proxy(req, res, panel, upstreamPath, cookies, proto) {
 // Runs after server.js's same-origin check.
 function handlePanel(req, res, url) {
   const match = url.pathname.match(/^\/panels\/([^/]+)(\/.*)?$/);
-  const panel = match ? panels.get(match[1]) : null;
+  const panel = match ? panelById(match[1]) : null;
   if (!panel) return sendText(res, 404, "not found");
   const rawSearch = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
   // The app is mounted under a directory; without the slash its relative URLs
@@ -225,4 +173,4 @@ function handlePanel(req, res, url) {
   return proxy(req, res, panel, `${match[2]}${query}`, cookies, proto);
 }
 
-module.exports = { configurePanels, publicPanels, handlePanel };
+module.exports = { handlePanel };

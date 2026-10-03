@@ -27,6 +27,8 @@ function errorStatus(error) {
   if (code === "EBODYTOOLARGE" || code === "EATTACHMENTTOOLARGE" || code === "EPAYLOADTOOLARGE" || code === "EVOICETOOLARGE") return 413;
   if (code === "ENOSESSION" || code === "ENOTRANSCRIPT" || code === "ENOTFOUND") return 404;
   if (code === "EEXIST" || code === "ENOSESSIONFILE" || code === "ECONFLICT" || code === "EBUSY") return 409;
+  // A setting fixed by the environment; Settings shows it read-only.
+  if (code === "ELOCKED") return 409;
   if (code === "EUNSUPPORTEDATTACHMENT") return 415;
   if (code === "ENOTRANSCRIBER" || code === "EVOICEUPSTREAM" || code === "EVOICETIMEOUT" || code === "EMODELSUNAVAILABLE") return 503;
   // omp under the RPC runner could not be started or did not answer.

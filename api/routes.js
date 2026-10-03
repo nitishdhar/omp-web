@@ -11,8 +11,12 @@ const { handleChat } = require("./chat-routes");
 const { getGitStatus } = require("./git-status");
 const { transcribeVoice } = require("./transcribe");
 const { servePreviewFile } = require("./file-preview");
-const { listPreviewRoots, setPreviewRoots } = require("./preview-roots");
-const { publicPanels } = require("./panels");
+const { publicPanels } = require("./panel-config");
+const { handleSettings } = require("./settings-routes");
+const { invalidateStorage } = require("./storage-stats");
+const { sleepIdleNow } = require("../sessions/reaper");
+const { startUpdate, startReload, currentJob } = require("./omp-update");
+const { getVersion } = require("./omp-version");
 
 const INDEX_PATH = path.join(__dirname, "..", "public", "index.html");
 
@@ -61,15 +65,23 @@ async function handleApi(req, res, url) {
       panels: publicPanels(),
     });
   }
-  if (sub[0] === "settings" && sub[1] === "preview-roots" && sub.length === 2) {
-    if (req.method === "GET") return sendJson(res, 200, { roots: listPreviewRoots() });
-    if (req.method === "PUT") {
-      try {
-        const body = JSON.parse((await readBody(req)) || "{}");
-        return sendJson(res, 200, { roots: await setPreviewRoots(body.roots) });
-      } catch (error) {
-        return sendError(res, error);
+  if ((sub[0] === "settings" || sub[0] === "stats") && (await handleSettings(req, res, sub, url))) return;
+  if (sub[0] === "omp" && sub.length === 2) {
+    try {
+      if (req.method === "GET" && sub[1] === "version") {
+        return sendJson(res, 200, await getVersion({ refresh: url.searchParams.get("refresh") === "1" }));
       }
+      if (req.method === "GET" && sub[1] === "job") return sendJson(res, 200, { job: currentJob() });
+      if (req.method === "POST" && sub[1] === "update") {
+        req.resume();
+        return sendJson(res, 202, { job: startUpdate() });
+      }
+      if (req.method === "POST" && sub[1] === "reload") {
+        req.resume();
+        return sendJson(res, 202, { job: startReload() });
+      }
+    } catch (error) {
+      return sendError(res, error);
     }
   }
   if (req.method === "GET" && sub[0] === "version" && sub.length === 1) {
@@ -92,6 +104,14 @@ async function handleApi(req, res, url) {
       return sendError(res, error);
     }
   }
+  if (req.method === "POST" && sub[0] === "sessions" && sub[1] === "sleep-idle" && sub.length === 2) {
+    try {
+      req.resume();
+      return sendJson(res, 200, await sleepIdleNow());
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
   if (req.method === "DELETE" && sub[0] === "sessions" && sub[1] && sub[2] === "ghost" && sub.length === 3) {
     try {
       const ok = sessions.forgetGhost(sub[1]);
@@ -109,7 +129,9 @@ async function handleApi(req, res, url) {
   }
   if (req.method === "DELETE" && sub[0] === "sessions" && sub[1] && sub[2] === "data" && sub.length === 3) {
     try {
-      return sendJson(res, 200, { ok: true, freed: await sessions.purge(sub[1]) });
+      const freed = await sessions.purge(sub[1]);
+      invalidateStorage();
+      return sendJson(res, 200, { ok: true, freed });
     } catch (error) {
       return sendError(res, error);
     }

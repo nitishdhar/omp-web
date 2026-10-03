@@ -18,11 +18,12 @@ import * as chat from "./chat.js";
 import * as ghost from "./ghost.js";
 import * as panels from "./panels.js";
 import { wirePalette } from "./palette.js";
-import { wireSettings, renderSettings } from "./settings.js";
+import { wireSettings, renderSettings, showSettings, hideSettings, watchOmpUpdates } from "./settings/index.js";
 import { createVoiceController } from "./voice.js";
 import { suppressTailScroll } from "./chat/transcript.js";
 import { closeFileViewer, openFileViewer } from "./file-viewer.js";
 import { showNotice, hideNotice, copyWithNotice } from "./notice.js";
+import { formatBytes } from "./format.js";
 import { defaultChoice, sessionNameFrom, requestSession, rememberChoice } from "./new-session.js";
 
 const voice = createVoiceController();
@@ -43,14 +44,17 @@ let refreshing = false;
 
 // Ghost detail: a dead session previewed in the main pane. Selecting a ghost
 // is mutually exclusive with a live session — the terminal and chat poll both
-// A panel view parks the session the same way, so one exit serves both.
+// A panel view and the Settings page park the session the same way, so one
+// exit serves all three.
 function clearPreviewView() {
-  if (!state.selectedGhost && !state.openPanel
+  if (!state.selectedGhost && !state.openPanel && !state.settingsOpen
     && !el.main.classList.contains("ghost-active") && !el.main.classList.contains("panel-active")) return;
   state.selectedGhost = null;
   state.openPanel = null;
+  state.settingsOpen = false;
   ghost.hideGhost();
   panels.hidePanel();
+  hideSettings();
   applyMode(state.mode);
   // The parked live entry survived the preview (socket + buffer intact):
   // resume its host, header and scrubber with no replay, or fall back to
@@ -67,9 +71,12 @@ function clearPreviewView() {
 function selectGhost(id) {
   const item = state.restorable.find((g) => g.id === id);
   if (!item) return;
-  // A ghost replaces an open panel in place; the live session stays parked.
+  // A ghost replaces an open panel or Settings in place; the live session
+  // stays parked.
   state.openPanel = null;
   panels.hidePanel();
+  state.settingsOpen = false;
+  hideSettings();
   closeFileViewer();
   chat.resetChat();
   // Park the live session: socket + buffer survive, chrome hides, current
@@ -103,6 +110,8 @@ function selectPanel(id) {
   if (!panel) return;
   state.selectedGhost = null;
   ghost.hideGhost();
+  state.settingsOpen = false;
+  hideSettings();
   closeFileViewer();
   chat.resetChat();
   terminal.parkCurrent();
@@ -115,6 +124,43 @@ function selectPanel(id) {
   el["mode-toggle"].hidden = true;
   if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
   emit("sidebar:rerender");
+}
+
+// Settings is a page in the main pane, parked over the session like a panel.
+function selectSettings() {
+  state.selectedGhost = null;
+  ghost.hideGhost();
+  state.openPanel = null;
+  panels.hidePanel();
+  closeFileViewer();
+  chat.resetChat();
+  terminal.parkCurrent();
+  activateQuickkeysSession(null);
+  state.settingsOpen = true;
+  chat.setComposerEnabled(false);
+  if (!showSettings()) {
+    // A tab on a cached shell from before the page shipped has no
+    // #settings-mode; surface the reload prompt instead of a dead pane.
+    el["update-btn"].hidden = false;
+  }
+  el["term-title"].textContent = "Settings";
+  el["term-title"].title = "";
+  el["mode-toggle"].hidden = true;
+  if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
+  emit("sidebar:rerender");
+}
+
+// Settings changed something /api/meta reports (panels, profile catalogs): reload it and
+// let the meta:refreshed subscribers repaint, as the profile popover does.
+async function refreshMeta() {
+  try {
+    const meta = await api("/meta");
+    if (!meta || typeof meta !== "object") return;
+    state.meta = meta;
+    emit("meta:refreshed");
+  } catch (e) {
+    showNotice("Could not refresh settings: " + e.message, { tone: "error" });
+  }
 }
 
 function openSession(session) {
@@ -215,7 +261,7 @@ async function checkFrontendVersion() {
 // the session is gone, so the saved id must survive until a real list arrives.
 let restorePending = true;
 function restoreSavedSession() {
-  if (state.current || state.selectedGhost || state.openPanel) {
+  if (state.current || state.selectedGhost || state.openPanel || state.settingsOpen) {
     restorePending = false;
     return;
   }
@@ -284,6 +330,9 @@ async function boot() {
     state.selectedFolder = state.selectedFolder || state.meta.workspaceRoot;
     renderSettings();
     panels.renderPanelNav();
+    // Only after the token proved good: an unauthenticated check would raise
+    // the auth gate a second time.
+    watchOmpUpdates();
     voice.setAvailable(Boolean(state.meta.transcribe));
     if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
     wireViewportHeight();
@@ -487,13 +536,6 @@ async function forgetGhost(id) {
     showNotice("Removed from not running");
     if (state.selectedGhost === id) clearPreviewView();
   } catch (e) { showNotice("Forget failed: " + e.message, { tone: "error" }); }
-}
-
-function formatBytes(bytes) {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
 }
 
 // Delete is the irreversible counterpart to Forget: the confirmation states
@@ -762,6 +804,13 @@ get("session:forget", (id) => forgetGhost(id));
 get("session:delete", (id) => deleteSession(id));
 get("ghost:select", (id) => selectGhost(id));
 get("panel:open", (id) => selectPanel(id));
+get("settings:open", () => selectSettings());
+get("sessions:refresh", () => refresh());
+get("panels:saved", ({ changed } = {}) => {
+  panels.dropFrames(changed || []);
+  void refreshMeta();
+});
+get("meta:refresh", () => refreshMeta());
 // Ghost detail actions live on the static skeleton in index.html; they act on
 // whichever ghost is currently selected.
 el["ghost-restore-btn"].onclick = () => {
