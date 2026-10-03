@@ -1,15 +1,18 @@
 "use strict";
 // Per-profile chat model catalog (native `omp models --json`) and the in-session
-// switch. The switch is OMP's own `/switch <selector>:<level>` built-in, typed
-// into the TUI like any Chat send: it changes the live model and thinking level
-// for this session only, writes model_change + thinking_level_change to the
-// transcript (which Chat already projects), and never reaches the model.
+// switch. An rpc session switches through the bridge (set_model plus
+// set_thinking_level); a TUI session gets OMP's own `/switch
+// <selector>:<level>` built-in typed like any Chat send. Either way OMP changes
+// the live model and thinking level for this session only, writes model_change
+// + thinking_level_change to the transcript (which Chat already projects), and
+// never reaches the model.
 
 const { execFile } = require("child_process");
 const { promisify } = require("util");
 const config = require("../config");
 const sessions = require("../sessions");
 const { listProfiles } = require("./util");
+const { profileHome } = require("../transcripts");
 
 const execFileAsync = promisify(execFile);
 const CACHE_MS = 10 * 60_000;
@@ -49,8 +52,14 @@ async function load(profile) {
   const args = profile === "default"
     ? ["models", "--json"]
     : [`--profile=${profile}`, "models", "--json"];
+  // Same profile selection as a session launch: an inherited OMP_PROFILE
+  // made the "default" catalog list another profile's models, which the
+  // default runtime then rejected as not found.
+  const env = { ...process.env, PI_CODING_AGENT_DIR: profileHome("default") };
+  delete env.OMP_PROFILE;
+  delete env.PI_PROFILE;
   const { stdout } = await execFileAsync(config.ompBin, args, {
-    env: process.env,
+    env,
     timeout: 15_000,
     maxBuffer: 4 * 1024 * 1024,
     windowsHide: true,
@@ -93,7 +102,18 @@ async function switchModel(id, { model, effort } = {}) {
     }
     level = effort;
   }
-  await sessions.sendText(id, level ? `/switch ${entry.selector}:${level}` : `/switch ${entry.selector}`);
+  if (session.runner === "rpc") {
+    // Selectors are `<provider>/<model id>`; only the id may contain slashes.
+    const slash = entry.selector.indexOf("/");
+    if (slash <= 0) throw modelsError("EBADMODEL", `${entry.selector} names no provider`);
+    await sessions.setRuntimeModel(id, {
+      provider: entry.selector.slice(0, slash),
+      modelId: entry.selector.slice(slash + 1),
+      level,
+    });
+  } else {
+    await sessions.sendText(id, level ? `/switch ${entry.selector}:${level}` : `/switch ${entry.selector}`);
+  }
   return { model: entry.selector, effort: level };
 }
 

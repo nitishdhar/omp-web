@@ -29,6 +29,8 @@ function errorStatus(error) {
   if (code === "EEXIST" || code === "ENOSESSIONFILE" || code === "ECONFLICT" || code === "EBUSY") return 409;
   if (code === "EUNSUPPORTEDATTACHMENT") return 415;
   if (code === "ENOTRANSCRIBER" || code === "EVOICEUPSTREAM" || code === "EVOICETIMEOUT" || code === "EMODELSUNAVAILABLE") return 503;
+  // omp under the RPC runner could not be started or did not answer.
+  if (code === "ERUNNER" || code === "ENOBRIDGE" || code === "ESTOPPING") return 503;
   if (
     error instanceof SyntaxError ||
     (typeof code === "string" && code.startsWith("EBAD")) ||

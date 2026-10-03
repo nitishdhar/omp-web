@@ -196,6 +196,7 @@ function defaultState() {
     subagents: [],
     latestAdvisor: null,
     exited: null,
+    lastRuntime: null,
     pendingAsk: null,
     working: null,
     error: null,
@@ -236,6 +237,7 @@ function cloneState(prev) {
     subagents: (prev.subagents || []).map(agent => Object.assign({}, agent)),
     latestAdvisor: prev.latestAdvisor || null,
     exited: prev.exited,
+    lastRuntime: prev.lastRuntime ? Object.assign({}, prev.lastRuntime) : null,
     pendingAsk: prev.pendingAsk,
     working: prev.working ? Object.assign({}, prev.working) : null,
     error: prev.error,
@@ -435,6 +437,11 @@ function project(entries, prev) {
         };
         // Runtime-local state cannot survive an OMP process exit. Keep durable
         // Todo/agent history, but do not present its model or work as current.
+        // The identity is kept aside: a Chat (rpc) session's omp exits on every
+        // idle stop and resumes the same model on its next launch.
+        if (state.model) {
+          state.lastRuntime = { model: state.model, modelAt: state.modelAt, provider: state.provider, effort: state.effort };
+        }
         state.pendingTools = {};
         state.toolStartTimes = {};
         state.pendingAsk = null;
@@ -450,7 +457,7 @@ function project(entries, prev) {
           s.status === "running" ? Object.assign({}, s, { status: "ended" }) : s,
         );
         const label = state.exited.reason || state.exited.kind || "exit";
-        items.push({ id, at, kind: "event", text: `Session exited: ${label}` });
+        items.push({ id, at, kind: "event", exit: true, text: `Session exited: ${label}` });
         continue;
       }
 
@@ -917,6 +924,7 @@ function project(entries, prev) {
     advisor: state.latestAdvisor || null,
     error: state.error,
     exited: state.exited,
+    lastRuntime: state.lastRuntime,
     omitted: Object.values(state.omitted).some(Boolean) ? Object.assign({}, state.omitted) : null,
   };
 

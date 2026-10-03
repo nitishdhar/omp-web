@@ -7,7 +7,8 @@ import { api } from "./api.js";
 import { state } from "./state.js";
 import { upsertItems, clearLog, removeItem, syncActivityNode, pinToTail, deliveredUserText } from "./chat/transcript.js";
 export { refreshLanding } from "./chat/panels.js";
-import { renderPanels, setChatLoading, setInterruptSession } from "./chat/panels.js";
+import { renderPanels, setChatLoading, setInterruptSession, setAskBusy } from "./chat/panels.js";
+import { showNotice } from "./notice.js";
 import {
   activateComposer,
   editComposerDraft,
@@ -194,7 +195,7 @@ async function attemptSend(record) {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     stopPoll();
-  } else if (sessionId && state.mode === "chat") {
+  } else if (sessionId && state.view === "chat") {
     schedulePoll(0);
   }
 });
@@ -226,7 +227,7 @@ export function enterChat(id, forceReset = false) {
   if (changed || forceReset) resetInterruptButton();
   activateComposer(id, { reset: forceReset });
   if (changed || forceReset) restoreLocalUserItems(id);
-  if (state.mode === "chat") schedulePoll(0);
+  if (state.view === "chat") schedulePoll(0);
 }
 
 export function leaveChat() {
@@ -384,6 +385,37 @@ export async function interruptChat() {
   }
 }
 
+// The ask card disables itself on click; success leaves it disabled until the
+// next poll drops the answered request, failure hands the controls back.
+export async function answerAsk({ sessionId: target, requestId, value, confirmed, cancelled } = {}) {
+  if (!sessionId || target !== sessionId || requestId == null) {
+    if (requestId != null) setAskBusy(requestId, false);
+    return;
+  }
+  const id = sessionId;
+  const body = { requestId };
+  if (cancelled) body.cancelled = true;
+  else if (typeof confirmed === "boolean") body.confirmed = confirmed;
+  else body.value = String(value ?? "");
+  try {
+    await api(`/sessions/${encodeURIComponent(id)}/chat/answer`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (sessionId === id) schedulePoll(0);
+  } catch (error) {
+    if (sessionId !== id) return;
+    setAskBusy(requestId, false);
+    if (error?.code === "ECONFLICT") {
+      showNotice("That question was already answered or withdrawn", { tone: "error" });
+      schedulePoll(0);
+    } else {
+      showNotice("Answer failed: " + (error?.message || "unknown error"), { tone: "error" });
+    }
+  }
+}
+
 // Resumption paths for transcript error cards and the Regenerate action.
 export function retryPollTurn(cardSessionId) {
   if (!sessionId || (cardSessionId && cardSessionId !== sessionId)) return false;
@@ -418,7 +450,7 @@ function stopPoll() {
 }
 
 function schedulePoll(delay) {
-  if (!sessionId || state.mode !== "chat" || document.visibilityState === "hidden") return;
+  if (!sessionId || state.view !== "chat" || document.visibilityState === "hidden") return;
   const request = { generation: pollGeneration, delay };
   if (pollController) {
     if (!queuedPoll || queuedPoll.generation !== request.generation) {
@@ -452,7 +484,7 @@ async function doPoll(generation) {
     generation !== pollGeneration
     || pollController
     || !sessionId
-    || state.mode !== "chat"
+    || state.view !== "chat"
     || document.visibilityState === "hidden"
   ) return;
 
@@ -556,7 +588,7 @@ async function doPoll(generation) {
     queuedPoll = null;
     if (
       sessionId
-      && state.mode === "chat"
+      && state.view === "chat"
       && document.visibilityState !== "hidden"
     ) {
       if (queued?.generation === pollGeneration) {

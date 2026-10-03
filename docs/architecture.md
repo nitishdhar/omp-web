@@ -7,25 +7,43 @@ browser (desktop or mobile), organized by **folder** and **profile**. It streams
 the real omp TUI — Agent Hub (`Alt+A`), thinking, tool cards, everything — with
 no feature loss.
 
-## Why tmux remains the single writer
+## One omp writer per session: two runners
 
-OMP is terminal-first and exposes no read-only subscription API for an existing
-session. The terminal remains the faithful control surface: `xterm.js` attaches
-through `node-pty` to the session's tmux pane, and tmux owns all input.
+An interactive omp TUI holds a whole session in memory for as long as it runs.
+Keeping one alive per session made every idle session cost 200–900 MB, so an
+agent session has a **runner**, recorded in tmux user option `@omp_runner`
+(it dies with the session like every other `@omp_*` option):
 
-Chat mode does **not** launch a second OMP process. It projects the same
-session's owned JSONL into structured items and injects messages back through
-tmux. Terminal and chat are interchangeable views of one runtime:
+- **`rpc`** (new and restored agent sessions). The tmux pane runs an idle
+  holder (`tail -f /dev/null`). Sending from Chat starts `bin/rpc-bridge.js` in
+  the pane, which runs `omp --mode rpc-ui --no-ui` on the session's transcript
+  and serves one Unix socket for omp-web. After `OMP_WEB_RPC_IDLE_MINUTES`
+  (default 10) settled and idle, omp exits and the pane returns to the holder.
+- **`tui`** (Terminal on demand, and every session that predates runners).
+  The pane runs the interactive TUI exactly as before; Chat input is typed into
+  it through tmux.
+
+Opening **Terminal** on an rpc session is a relaunch like profile reload: wait
+until the session is settled (`409 EBUSY` while a turn runs), stop the bridge,
+start the TUI resuming the same transcript, set `@omp_runner=tui`. The reaper
+(`sessions/reaper.js`, every 60 s) hands an idle TUI back to rpc once it is not
+working/waiting/starting, has no attached terminal client, and has been quiet
+for `OMP_WEB_TUI_IDLE_MINUTES` (default 30). Both directions run in the
+per-session operation queue and never start a new process before the old one
+has exited, so a transcript only ever has one omp writing it. The previous RPC
+design was retired because it ran a second process beside the TUI; here the
+two never coexist.
 
 ```
-browser terminal ─WebSocket─> node-pty ─> tmux ─> OMP TUI
-browser chat ─GET byte pages─> JSONL projection ─┘
-browser chat ─POST message/keys──────────> tmux ─┘
+browser terminal ─WebSocket─> node-pty ─> tmux pane ─> omp TUI        (runner tui)
+browser chat ─POST message/keys/answer──> tmux paste  ─┘
+browser chat ─POST message/keys/answer──> socket ─> rpc-bridge ─> omp --mode rpc-ui   (runner rpc)
+browser chat ─GET byte pages─> JSONL projection (both runners write the same file)
 ```
 
-This avoids the retired RPC design's second-writer lease and preserves instant
-switch-back to the complete TUI. REST (`/api/*`) manages sessions and chat
-projection/input; `/ws` carries the live terminal.
+Both runners write the same JSONL, so Chat's projection does not care which one
+is running. REST (`/api/*`) manages sessions and chat projection/input; `/ws`
+carries the live terminal.
 
 ## Local installation boundary
 
@@ -44,7 +62,7 @@ plans, repository agent instructions, and local runtime data are excluded.
 `OMP_WEB_HOME` relocates omp-web's env/token/attachment directory; it defaults
 to `~/.omp-web`. This is separate from OMP's profile and transcript storage.
 Existing environment overrides and the existing operator deployment remain
-supported. Terminal sessions clear inherited `OMP_PROFILE` and `PI_PROFILE`,
+supported. Agent sessions (both runners) clear inherited `OMP_PROFILE` and `PI_PROFILE`,
 then set the default agent directory explicitly before applying a selected
 named profile. Native setup also clears inherited profile/directory selectors.
 Doctor runs OMP help probes in a disposable HOME because upstream help can
@@ -57,18 +75,21 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | `server.js` | Node HTTP + WebSocket only: static shell serving, `/api` dispatch (delegated), `/ws` PTY bridge, process guards. |
 | `bin/omp-web.js` | macOS/Linux CLI: foreground start, non-destructive local setup, prerequisite checks, and explicit handoff to native OMP profile onboarding. `doctor` treats Linux as warn-only; every later row validates what actually matters there. |
 | `bin/postinstall.js` | Repairs executable permissions on installed node-pty spawn helpers, including hoisted dependency layouts. |
-| `api/routes.js` | REST route table. Session create/list/scroll/profile-reload/pin/delete operations use shared bounded request/error handling; `/api/meta` projects native profile names plus bounded, identifier-validated `modelRoles` provider/model/effort metadata; chat routes and session attachments delegate to their owning modules. |
+| `api/routes.js` | REST route table. Session create/list/scroll/profile-reload/pin/delete operations use shared bounded request/error handling; `POST /api/sessions/:id/runner {runner}` switches an agent session between `rpc` and `tui` (`409 EBUSY` while a turn runs); `/api/meta` projects native profile names plus bounded, identifier-validated `modelRoles` provider/model/effort metadata; chat routes and session attachments delegate to their owning modules. |
 | `api/util.js` | Shared JSON response/error mapping and a 1 MB, strict-UTF-8 request-body reader. API responses are `no-store`. |
 | `api/usage.js` | One-minute native `omp usage --json --redact` adapter. It aggregates configured profiles, deduplicates accounts by allowlisted usage fields, and strips account/credential metadata before returning dynamic provider limit data to the browser. |
-| `api/models.js` | Per-profile chat model catalog from native `omp models --json` (selector, name, supported thinking levels; 10-minute cache, `GET /api/profiles/:name/models`) and the in-session switch (`POST /api/sessions/:id/model {model, effort}`). The switch validates both values against the session's profile catalog, then types OMP's own `/switch <selector>[:<level>]` through `sendText` (same guard, queue, and composer clear as a Chat send). OMP changes the live model and thinking level for that session only and records `model_change` (role `temporary`) and, when the level changed, `thinking_level_change`; no model request is made. A catalog failure is `503 EMODELSUNAVAILABLE`. |
+| `api/models.js` | Per-profile chat model catalog from native `omp models --json` (selector, name, supported thinking levels; 10-minute cache, `GET /api/profiles/:name/models`; run with the same profile environment as a session launch) and the in-session switch (`POST /api/sessions/:id/model {model, effort}`). The switch validates both values against the session's profile catalog. An rpc session switches through the bridge (`set_model`, `set_thinking_level`, starting omp if needed); a TUI session gets OMP's own `/switch <selector>[:<level>]` typed through `sendText` (same guard, queue, and composer clear as a Chat send). Either way OMP changes the live model and thinking level for that session only and records `model_change` (role `temporary`) and, when the level changed, `thinking_level_change`; no model request is made. A catalog failure is `503 EMODELSUNAVAILABLE`. |
 | `api/transcribe.js` | Voice-input transcription proxy. Accepts a short browser-recorded clip and forwards it to the configured OpenAI-compatible `/audio/transcriptions` endpoint; the provider key lives only in server config and never reaches the browser, and audio is held in memory, never written to disk. |
 | `api/attachments.js` | Bounded, authenticated image/document upload parser; validates allowed types and stores private per-session attachments outside workspaces. |
 | `api/file-preview.js` | Authenticated raw file preview endpoint: opens the resolved file with `O_NOFOLLOW`, re-checks containment on the **opened descriptor's** path (no check/open race), applies the viewer-folder credential filter, and streams only regular allowlisted files up to 10 MiB. |
 | `api/file-resolve.js` | Where a cited path lives. A relative path resolves in order: `<session folder>/<path>`, then `<workspace>/<repo>/<path>` for exactly one top-level repo, then a unique suffix match under the session folder (`api/file-find.js`), then a unique suffix match in the user's viewer folders. Several matches return `409 ECONFLICT` rather than a guess. `~` expands to `$HOME` and `…/` elisions are treated as suffixes, but every result must still fall inside an allowed root: the session folder, sibling workspace repos, that session's attachments, and Settings → File viewer folders. |
 | `api/file-find.js` | Bounded async suffix search behind the preview resolver. Agents cite documents by bare name (`action-docket.md`), and resolution used to stop at the folder's top level, so a nested file was a dead link while its top-level sibling opened. It skips dot/build dirs, never follows symlinks, refuses `..`, stops at depth 8 or 25k files (a session rooted at the whole workspace is ~85k), and treats a capped walk as unproven rather than unique. |
 | `api/preview-roots.js` | **File viewer folders**, edited in Settings (`GET`/`PUT /api/settings/preview-roots`) and stored in `~/.omp-web/settings.json` (0600, atomic write), read on every request so changes apply without a restart. Extra roots must be existing absolute (or `~/`) directories; `/`, `$HOME` and its ancestors, and anything overlapping omp-web's own data directory are refused. Inside an extra root, hidden paths, credential-shaped names (`auth`, `oauth`, `credentials`, `secret`, `token`, `password`, `api_key`) and `mcp.json`/`settings.local.json` are never served; the check runs on the opened descriptor's path. Elided citations (`…/Gift Deed/x.pdf`) resolve by unique suffix in the session folder, then in these roots. This is not a boundary against the token holder (the terminal is a full shell); it keeps the web route from serving the whole home directory. |
-| `sessions.js` | tmux-backed agent and shell sessions (`tmux -L omp-web`). Every operation resolves the exact pane id before acting; chat input, keys, kill, and profile reload share a bounded per-session queue. Per-session state lives in `@omp_*` user options (folder/profile/type/status/status_at/activity/title/created/pinned/transcript/thinking/thinking_at/model/model_at — it dies with the session). Shell sessions stop after tmux opens its configured login shell; agent sessions launch OMP with the status extension. Lists reconcile the bounded title record and a cached 128 KiB transcript tail for agent sessions, so `/rename` and lifecycle status reach the dashboard even for live processes launched before the extension. `lastActivity` comes from tmux `session_activity`. |
-| `sessions/status.js` | Pure status-derivation core (required by `sessions.js`; `sessionFromLine` keeps the `@omp_*` parse context). Owns the staleness constants, the 128-entry transcript-tail cache, and the four derivation functions with their precedence — live pane identity > fresh heartbeat (≤90s) > transcript tail > idle — plus the truth table in its header comment. The extension keeps a mirror comment, not shared code (separate runtime). |
+| `bin/rpc-bridge.js` | Chat (rpc) runner, launched in the tmux pane by `respawn-pane` so omp-web restarts never kill it. Spawns `omp --mode rpc-ui --no-ui`, listens on `<OMP_WEB_HOME>/run/<id>.sock` (dir 0700, socket 0600, removed on exit; one JSON request per connection: `state`, `prompt`, `abort`, `model`, `answer`, `stop`), and publishes `@omp_status`/`@omp_status_at`/`@omp_activity`/`@omp_thinking` with the same semantics and heartbeat as the TUI extension. A pending omp dialog (the `ask` tool) is published as bounded JSON in `@omp_ui` and answered through `answer`; "Other (type your own)" is answered in one step. A send during a running turn steers it (the TUI's Enter). Stops omp after the idle window, when startup never reaches `ready`, and on SIGHUP/SIGTERM. |
+| `sessions/runner.js` | Pane commands for both runners (TUI wrapper, holder, bridge), the bridge socket client, and the resume source: the newest transcript in the session's profile scope that contains a message record. A session created with `resume:false` keeps `@omp_noresume` until it has written a conversation of its own. |
+| `sessions/reaper.js` | Every 60 s hands idle, unattached TUI sessions back to rpc (rules above). Its idle time is the later of tmux `session_activity` and the transcript's mtime, because Chat sends into a TUI never move `session_activity`. Skips shells and TUIs that already exited to the recovery shell. |
+| `sessions.js` | tmux-backed agent and shell sessions (`tmux -L omp-web`). Every operation resolves the exact pane id before acting; chat input, keys, answers, model switches, runner switches, kill, and profile reload share a bounded per-session queue. Per-session state lives in `@omp_*` user options (folder/profile/type/status/status_at/activity/title/created/pinned/transcript/thinking/thinking_at/model/model_at/runner/ui/noresume — it dies with the session). Launch arguments come from one place (`ompEnv` + `ompLaunchArgs` + `paneCommandFor`) for both runners, so create, restore, reload and Terminal open start omp the same way. Shell sessions stop after tmux opens its configured login shell. Lists reconcile the bounded title record and a cached 128 KiB transcript tail for agent sessions, so `/rename` and lifecycle status reach the dashboard even for live processes launched before the extension. `lastActivity` comes from tmux `session_activity`. |
+| `sessions/status.js` | Pure status-derivation core (required by `sessions.js`; `sessionFromLine` keeps the `@omp_*` parse context). Owns the staleness constants, the 128-entry transcript-tail cache, and the four derivation functions with their precedence — live pane identity > fresh heartbeat (≤90s) > transcript tail > idle — plus the truth table in its header comment. An rpc session is never `shell` (its holder pane runs `tail`); without a fresh heartbeat nothing is running, so it reads `idle`. The thinking headline the extension and the bridge both publish lives in `extensions/thinking-headline.cjs`, which Bun and Node both load. |
 | `sessions/purge.js` | A session's on-disk data for **Delete**: `<sessionsDir>/<id>` and `<attachmentsDir>/<id>`. Measures them with `lstat` (links count as themselves) and removes them, unlinking symlinks rather than following them. `sessions.js` owns the case-twin guard, stopping a live session, and the registry purge. |
 | `registry.js` | The ONE sanctioned durable exception: ghost set `{entries, forgotten}` for boot recovery, never live state. Never read for liveness; `forgotten` suppresses transcript ghosts only (200-cap, `upsert` clears a re-created id). Reads go through a stat-keyed cache (one `statSync`, copies out so callers cannot poison it); explicit mutations stay synchronous, while adopt-on-list collects drift and flushes ONE deferred `writeRegistry`. Empty/corrupt/single-bad-record inputs degrade to the transcript fallback, never throw. |
 | `extensions/session-status.mjs` | OMP lifecycle adapter. Session start, agent, ask, approval, retry/compaction, and shutdown hooks publish precise status plus a heartbeat into the owning tmux session without adding a sidecar process or state file. **Only the interactive top-level session publishes**: subagents run in-process with their own runner and inherit this extension plus `OMP_WEB_STATUS_TARGET`, so every handler guards on `ctx.hasUI`. Writes dedupe against the last value tmux accepted, so a failed write retries on the next transition. Auto-compaction additionally publishes a bounded `compaction` activity until `auto_compaction_end`. A successful terminal agent turn publishes Recently done, then the heartbeat settles it to Idle after five minutes unless new work supersedes it. `message_update` reasoning deltas publish a throttled one-line headline into `@omp_thinking`/`@omp_thinking_at`, cleared when text, a tool call, or the turn begins. |
@@ -264,10 +285,23 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   clears a stale inset immediately. Scroll events inside a 450ms window around
   viewport resizes cannot flip followTail; sending always re-pins. Profile
   reload lives in the terminal header and sidebar menu only.
-- Pending `ask` options remain read-only because JSONL does not expose the
-  TUI's current selector position. **Answer in Terminal** switches to the
-  authoritative control surface; Chat never guesses with relative arrow-key
-  input.
+- A pending `ask` in an **rpc** session is answerable in Chat: the bridge holds
+  omp's dialog request, `GET /chat` exposes it as `derived.ui`, and the card
+  posts `POST /api/sessions/:id/chat/answer {requestId, value|confirmed|cancelled}`
+  (`409 ECONFLICT` when it was already answered or withdrawn). Select options
+  are buttons, "Other (type your own)" takes typed text, confirm is Yes/No,
+  input/editor take text, and Dismiss cancels. In a **tui** session the options
+  stay read-only, because JSONL does not expose the TUI's selector position;
+  **Answer in Terminal** switches to the authoritative control surface and Chat
+  never guesses with relative arrow-key input.
+- Chat polling and the palette follow `state.view` (what is on screen), not the
+  stored mode preference: an rpc session always opens in Chat without starting
+  a TUI, even when the stored preference is Terminal, and only the Terminal
+  toggle converts it. The Stop control maps to omp's `abort` in an rpc session.
+- omp exits on every idle stop, runner switch and reload. Those exits are not
+  shown as timeline events for agent sessions, and the run row keeps the
+  pre-exit model (the next launch resumes it) unless the pane fell back to a
+  shell.
 - The terminal layer keeps real dimensions under the chat overlay for instant
   switch-back, but Chat mode makes the terminal canvas, mobile composer, and
   quick keys invisible and non-interactive. `#term-wrap`/`.content-host` also
@@ -651,6 +685,8 @@ Transport bounds checklist (every number enforced in code, not advisory):
 | `OMP_WEB_ATTACHMENTS_DIR` | `~/.omp-web/attachments` | Private, session-scoped attachment storage. |
 | `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux server label. |
+| `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Settled, idle minutes before a Chat (rpc) session's omp exits; fractions allowed. |
+| `OMP_WEB_TUI_IDLE_MINUTES` | `30` | Quiet minutes before the reaper hands an unattached TUI back to rpc; fractions allowed. |
 | `OMP_WEB_TOKEN` | *(file)* | Access token; when set, `/api` and `/ws` require it. Falls back to `~/.omp-web/token` (`setup --token` creates it). |
 | `OMP_WEB_ALLOW_OPEN` | empty | `1` permits an open console on a non-loopback bind. The server refuses open LAN binds without it. |
 | `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
@@ -690,6 +726,14 @@ Transport bounds checklist (every number enforced in code, not advisory):
 - **Dedupe status writes against what tmux accepted, not what was intended**:
   recording the intent before the write meant one failed `tmux set-option`
   suppressed every retry until the next heartbeat.
+- **The bridge publishes "working" before sending a prompt, not after the
+  ack.** A fast `prompt_result` (a local slash command, a pre-dispatch
+  failure) can arrive in the same stdout chunk as the ack; updating after the
+  ack pinned the session at working, so it never idled out and Terminal kept
+  answering EBUSY.
+- **Profile reload must relaunch the pane.** A refactor once dropped the
+  relaunch, so reload only rewrote tmux options and the old runtime kept
+  running; both runners now go through the one launcher.
 
 ## Audit findings ledger (2026-09-20 live-app audit)
 

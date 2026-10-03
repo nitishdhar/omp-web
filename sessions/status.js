@@ -125,11 +125,16 @@ function settledTranscriptSessionStatus(file) {
 // unknown/other published -> never fresh -> T
 // Stale + pane foreground is OMP itself, a shell, or empty -> T (no exit
 // evidence); stale + any other foreground command -> shell (OMP is gone).
-function normalizedSessionStatus(sessionType, status, statusAt, paneCommand, transcript) {
+// rpc runner: the pane only ever holds the bridge or the idle `tail` holder,
+// never a user shell, so it is never `shell`. The bridge heartbeats while it
+// runs; without a fresh beat nothing is running, so a tail that still reads
+// working/waiting (a turn cut short) settles to idle.
+function normalizedSessionStatus(sessionType, status, statusAt, paneCommand, transcript, runner = null) {
   const timestamp = Number(statusAt) || 0;
   if (sessionType === "shell") return { status: "shell", statusAt: timestamp };
   const age = Date.now() - timestamp;
   const fresh = SESSION_STATUSES.has(status) && timestamp && age >= 0 && age <= STATUS_STALE_MS;
+  if (runner === "rpc") return rpcSessionStatus(status, timestamp, fresh, transcript);
   if (fresh && status === "starting") return { status: "starting", statusAt: timestamp };
   if (status === "shell") return { status: "shell", statusAt: timestamp };
   if (fresh && status !== "idle") return { status, statusAt: timestamp };
@@ -145,6 +150,16 @@ function normalizedSessionStatus(sessionType, status, statusAt, paneCommand, tra
   const base = paneCommand ? path.basename(String(paneCommand)) : "";
   if (base && base !== path.basename(config.ompBin) && !SHELL_COMMANDS.has(base)) {
     return { status: "shell", statusAt: timestamp };
+  }
+  return transcriptStatus;
+}
+
+function rpcSessionStatus(status, timestamp, fresh, transcript) {
+  if (fresh && status !== "idle" && status !== "shell") return { status, statusAt: timestamp };
+  const transcriptStatus = settledTranscriptSessionStatus(transcript);
+  if (transcriptStatus.status === "done") return transcriptStatus;
+  if (fresh || transcriptStatus.status !== "idle") {
+    return { status: "idle", statusAt: Math.max(timestamp, transcriptStatus.statusAt) };
   }
   return transcriptStatus;
 }

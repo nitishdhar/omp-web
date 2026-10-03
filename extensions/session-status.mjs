@@ -1,3 +1,5 @@
+import thinkingHeadline from "./thinking-headline.cjs";
+
 const STATUS_VALUES = new Set(["idle", "working", "waiting", "done", "shell"]);
 const TARGET = /^=omp_[A-Za-z0-9_-]{1,40}:$/;
 const SOCKET = /^[A-Za-z0-9_.-]{1,64}$/;
@@ -5,9 +7,6 @@ const HEARTBEAT_MS = 30_000;
 // Mirror of sessions/status.js — change together.
 const RECENT_DONE_MS = 5 * 60_000;
 const WRITE_TIMEOUT_MS = 1_500;
-const THINKING_MAX = 120;
-const THINKING_WRITE_MS = 1_000;
-const THINKING_BUFFER = 4_000;
 
 export default function sessionStatusExtension(pi) {
   const target = process.env.OMP_WEB_STATUS_TARGET || "";
@@ -22,9 +21,7 @@ export default function sessionStatusExtension(pi) {
   // Tracks what tmux actually holds, so a failed write is retried on the next
   // transition instead of being deduplicated away until the heartbeat.
   let written = { status: null, activity: null };
-  let thinkingBuffer = "";
-  let thinkingPublished = "";
-  let thinkingTimer = null;
+  const thinking = thinkingHeadline.createThinkingTracker((text) => void writeThinking(text));
 
   const writeStatus = async (status, activity) => {
     const result = await pi.exec(tmuxBin, [
@@ -67,43 +64,6 @@ export default function sessionStatusExtension(pi) {
     return writes;
   };
 
-  // Models bold the conclusion of a reasoning step, so the last bold span is
-  // the closest thing to a one-line "what I am doing now". Without one, fall
-  // back to the last completed sentence rather than a half-written clause.
-  const headlineFrom = (buffer) => {
-    let headline = "";
-    for (const match of buffer.matchAll(/\*\*([^*\n]{3,120})\*\*/g)) headline = match[1];
-    if (!headline) {
-      const sentences = buffer.split(/(?<=[.!?])\s+/);
-      for (let i = sentences.length - 1; i >= 0; i--) {
-        const candidate = sentences[i].trim();
-        if (candidate.length >= 8 && /[.!?]$/.test(candidate)) { headline = candidate; break; }
-      }
-    }
-    headline = headline.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
-    return headline.length > THINKING_MAX
-      ? headline.slice(0, THINKING_MAX - 1).trimEnd() + "\u2026"
-      : headline;
-  };
-
-  const flushThinking = () => {
-    clearTimeout(thinkingTimer);
-    thinkingTimer = null;
-    const headline = headlineFrom(thinkingBuffer);
-    if (!headline || headline === thinkingPublished) return;
-    thinkingPublished = headline;
-    void writeThinking(headline);
-  };
-
-  const clearThinking = () => {
-    clearTimeout(thinkingTimer);
-    thinkingTimer = null;
-    thinkingBuffer = "";
-    if (!thinkingPublished) return;
-    thinkingPublished = "";
-    void writeThinking("");
-  };
-
   // Subagents run in-process with their own runner and inherit this extension
   // and OMP_WEB_STATUS_TARGET; only the interactive top-level session owns the
   // tmux status. Without this guard every task subagent stomps the parent's
@@ -124,7 +84,7 @@ export default function sessionStatusExtension(pi) {
   pi.on("agent_start", (_event, ctx) => { if (ctx?.hasUI) void publish("working", false, ""); });
   pi.on("agent_end", (event, ctx) => {
     if (!ctx?.hasUI) return;
-    clearThinking();
+    thinking.clear();
     if (event?.willContinue || event?.isTerminal === false) {
       void publish("working", false, "");
       return;
@@ -151,7 +111,7 @@ export default function sessionStatusExtension(pi) {
   pi.on("auto_retry_start", (_event, ctx) => { if (ctx?.hasUI) void publish("working", false, ""); });
   pi.on("session_shutdown", (_event, ctx) => {
     if (!ctx?.hasUI) return;
-    clearThinking();
+    thinking.clear();
     void publish("shell", true, "");
   });
 
@@ -159,21 +119,7 @@ export default function sessionStatusExtension(pi) {
   // message completes, so a long thinking turn otherwise shows nothing at all
   // while it is the only thing happening.
   pi.on("message_update", (event, ctx) => {
-    if (!ctx?.hasUI) return;
-    const e = event?.assistantMessageEvent;
-    if (!e) return;
-    if (e.type === "thinking_start") {
-      thinkingBuffer = "";
-      return;
-    }
-    if (e.type === "thinking_delta" && typeof e.delta === "string") {
-      thinkingBuffer = (thinkingBuffer + e.delta).slice(-THINKING_BUFFER);
-      if (!thinkingTimer) thinkingTimer = setTimeout(flushThinking, THINKING_WRITE_MS);
-      return;
-    }
-    // Text or a tool call means the reasoning produced something the normal
-    // activity row can name; the headline would only go stale.
-    if (e.type === "text_start" || e.type === "toolcall_start") clearThinking();
+    if (ctx?.hasUI) thinking.update(event?.assistantMessageEvent);
   });
-  pi.on("message_end", (_event, ctx) => { if (ctx?.hasUI) clearThinking(); });
+  pi.on("message_end", (_event, ctx) => { if (ctx?.hasUI) thinking.clear(); });
 }

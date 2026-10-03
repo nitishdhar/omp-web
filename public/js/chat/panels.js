@@ -607,22 +607,31 @@ function renderAdvisor(derived) {
   node.append(card);
 }
 
-function renderAsk(derived) {
-  const node = el["chat-ask"];
-  if (!node) return;
-  const { pendingAsk, omitted } = derived;
-  const questions = Array.isArray(pendingAsk?.questions) ? pendingAsk.questions : [];
-  const omittedQuestions = positive(omitted?.askQuestions);
-  const omittedOptions = positive(omitted?.askOptions);
-  if (!changed("ask", [questions, pendingAsk ? omittedQuestions : 0, pendingAsk ? omittedOptions : 0])) return;
-  if (!pendingAsk || (!questions.length && !omittedQuestions && !omittedOptions)) {
-    clr(node);
-    hide(node);
-    return;
-  }
-  show(node);
-  clr(node);
+// An answer is in flight from the click until the poll drops the request or
+// the post fails; a second answer to the same request would be stale.
+let askBusyId = null;
+// The "Other" free-text field stays open across polls for its own request.
+let askOtherOpen = null;
 
+/** Disable or re-enable the answerable card's controls for one request. */
+export function setAskBusy(requestId, busy) {
+  if (busy) askBusyId = requestId;
+  else if (askBusyId === requestId) askBusyId = null;
+  const node = el["chat-ask"];
+  if (!node || node.dataset.requestId !== String(requestId)) return;
+  for (const control of node.querySelectorAll("button, textarea")) control.disabled = Boolean(busy);
+  node.setAttribute("aria-busy", String(Boolean(busy)));
+}
+
+function isOtherOption(label) {
+  return /\btype your own\b/i.test(label);
+}
+
+function optionLabel(option) {
+  return typeof option === "string" ? option : String(option?.label ?? "");
+}
+
+function renderReadOnlyAsk(node, questions, omittedQuestions, omittedOptions, answerInTerminal) {
   for (const q of questions) {
     const qblock = elem("div", { class: "cask-q" });
     if (q.header) {
@@ -659,11 +668,147 @@ function renderAsk(derived) {
   ]);
   if (partial) node.append(partial);
 
-  // Read-only: switch to terminal to answer
-  const btn = elem("button", { class: "primary cask-switch" });
+  // A TUI session answers in its own terminal. An rpc session has no TUI to
+  // switch to mid-turn; its answerable card arrives with derived.ui.
+  if (!answerInTerminal) return;
+  const btn = elem("button", { class: "primary cask-switch", type: "button" });
   btn.textContent = "Answer in Terminal";
   btn.addEventListener("click", () => emit("mode:change", "terminal"));
   node.append(btn);
+}
+
+// Free text shared by input/editor requests and the select's "Other" option.
+// Enter sends single-line answers; editor keeps Enter for newlines, and
+// Ctrl/Cmd+Enter sends from either.
+function answerField({ placeholder, multiline, label, onSubmit }) {
+  const form = elem("form", { class: "cask-text" });
+  const input = elem("textarea", {
+    class: "cask-input",
+    rows: multiline ? "3" : "1",
+    placeholder: placeholder || "Type your answer",
+    "aria-label": label,
+    autocomplete: "off",
+  });
+  const send = elem("button", { class: "primary cask-send", type: "submit" }, "Send");
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    onSubmit(input.value);
+  });
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || event.isComposing) return;
+    if (event.metaKey || event.ctrlKey || (!multiline && !event.shiftKey)) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  form.append(input, send);
+  return { form, input };
+}
+
+function renderAnswerableAsk(node, ui, pendingAsk) {
+  const requestId = String(ui.id);
+  if (askOtherOpen && askOtherOpen !== requestId) askOtherOpen = null;
+  if (askBusyId && askBusyId !== requestId) askBusyId = null;
+  node.dataset.requestId = requestId;
+  const answer = (fields) => {
+    setAskBusy(requestId, true);
+    emit("chat:answer", { sessionId: state.current, requestId, ...fields });
+  };
+  const title = String(ui.title || "");
+  // The transcript's ask call carries the header, descriptions and the
+  // recommended pick the UI request drops; match it by question text.
+  const questions = Array.isArray(pendingAsk?.questions) ? pendingAsk.questions : [];
+  const source = questions.find((q) => q.question === title) || null;
+
+  const qblock = elem("div", { class: "cask-q" });
+  if (source?.header) qblock.append(elem("div", { class: "cask-header", text: source.header }));
+  qblock.append(elem("div", { class: "cask-question", text: title || "The agent needs an answer" }));
+  if (ui.message) qblock.append(elem("div", { class: "cask-message", text: String(ui.message) }));
+  node.setAttribute("role", "group");
+  node.setAttribute("aria-label", title || "Question from the agent");
+
+  if (ui.method === "select") {
+    const opts = elem("div", { class: "cask-opts", role: "group", "aria-label": "Options" });
+    const options = Array.isArray(ui.options) ? ui.options : [];
+    options.forEach((option, index) => {
+      const label = optionLabel(option);
+      const other = isOtherOption(label);
+      const detail = source?.options?.find((o) => o.label === label) || null;
+      const recommended = source?.recommended != null &&
+        (source.recommended === label || source.recommended === index);
+      const button = elem("button", {
+        class: `cask-opt cask-choice${recommended ? " cask-rec" : ""}`,
+        type: "button",
+        "aria-expanded": other ? String(askOtherOpen === requestId) : null,
+        onclick: () => {
+          if (!other) { answer({ value: label }); return; }
+          askOtherOpen = askOtherOpen === requestId ? null : requestId;
+          renderAsk(lastAskDerived);
+          if (askOtherOpen) node.querySelector(".cask-input")?.focus();
+        },
+      }, elem("span", { class: "cask-label", text: label }));
+      const description = detail?.description || ui.optionDetails?.[index]?.description;
+      if (description) button.append(elem("span", { class: "cask-desc", text: description }));
+      opts.append(button);
+    });
+    qblock.append(opts);
+    if (askOtherOpen === requestId) {
+      const { form } = answerField({
+        placeholder: ui.placeholder,
+        multiline: false,
+        label: "Your answer",
+        onSubmit: (text) => { if (text.trim()) answer({ value: text }); },
+      });
+      qblock.append(form);
+    }
+  } else if (ui.method === "confirm") {
+    qblock.append(elem("div", { class: "cask-actions" },
+      elem("button", { class: "primary cask-action", type: "button", onclick: () => answer({ confirmed: true }) }, "Yes"),
+      elem("button", { class: "ghost cask-action", type: "button", onclick: () => answer({ confirmed: false }) }, "No"),
+    ));
+  } else {
+    const { form } = answerField({
+      placeholder: ui.placeholder,
+      multiline: ui.method === "editor",
+      label: title || "Your answer",
+      onSubmit: (text) => answer({ value: text }),
+    });
+    qblock.append(form);
+  }
+  node.append(qblock);
+  node.append(elem("div", { class: "cask-footer" },
+    elem("button", { class: "ghost cask-dismiss", type: "button", onclick: () => answer({ cancelled: true }) }, "Dismiss"),
+  ));
+  if (askBusyId === requestId) setAskBusy(requestId, true);
+}
+
+let lastAskDerived = {};
+function renderAsk(derived) {
+  const node = el["chat-ask"];
+  if (!node) return;
+  lastAskDerived = derived;
+  const { pendingAsk, omitted } = derived;
+  const ui = derived.ui && derived.ui.id != null ? derived.ui : null;
+  const questions = Array.isArray(pendingAsk?.questions) ? pendingAsk.questions : [];
+  const omittedQuestions = positive(omitted?.askQuestions);
+  const omittedOptions = positive(omitted?.askOptions);
+  const answerInTerminal = derived.runner !== "rpc";
+  if (!changed("ask", [ui, askOtherOpen, answerInTerminal, questions, pendingAsk ? omittedQuestions : 0, pendingAsk ? omittedOptions : 0])) return;
+  if (!ui && (!pendingAsk || (!questions.length && !omittedQuestions && !omittedOptions))) {
+    askBusyId = null;
+    askOtherOpen = null;
+    clr(node);
+    hide(node);
+    return;
+  }
+  show(node);
+  clr(node);
+  delete node.dataset.requestId;
+  node.removeAttribute("role");
+  node.removeAttribute("aria-label");
+  node.removeAttribute("aria-busy");
+  if (ui) renderAnswerableAsk(node, ui, pendingAsk);
+  else renderReadOnlyAsk(node, questions, omittedQuestions, omittedOptions, answerInTerminal);
 }
 
 // ── Empty state (#chat-empty) ─────────────────────────────────────────────────

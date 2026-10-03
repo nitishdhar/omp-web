@@ -7,7 +7,6 @@ const {
   profileHome,
   profileSessionDirFor,
   sessionDirFor,
-  bestResumeSource,
   readTranscriptTitle,
   resolveTranscript,
   fileMtime,
@@ -23,6 +22,7 @@ const {
 const registry = require("./registry");
 const purgeData = require("./sessions/purge");
 const { listFolders } = require("./api/util");
+const runner = require("./sessions/runner");
 
 // Thin wrapper around a dedicated tmux server (socket `config.tmuxSocket`).
 // tmux is the source of truth for session liveness; per-session metadata
@@ -31,7 +31,7 @@ const { listFolders } = require("./api/util");
 
 const OPT_KEYS = [
   "folder", "profile", "type", "status", "status_at", "activity", "title", "created",
-  "pinned", "transcript", "thinking", "thinking_at", "model", "model_at",
+  "pinned", "transcript", "thinking", "thinking_at", "model", "model_at", "runner", "ui",
 ];
 const SCROLL_FORMAT = "#{history_size}\t#{scroll_position}\t#{pane_in_mode}";
 const PANE_SCROLL_FORMAT = `#{pane_id}\t${SCROLL_FORMAT}`;
@@ -57,6 +57,8 @@ const SESSION_FORMAT = [
   "#{@omp_model_at}",
   "#{@omp_notitle}",
   "#{@omp_title_lock}",
+  "#{@omp_runner}",
+  "#{@omp_ui}",
 ].join("\t");
 const SESSION_ID = /^[A-Za-z0-9_-]{1,40}$/;
 const BOOTSTRAP_MARK = String(process.pid);
@@ -150,40 +152,11 @@ function tmuxPane(id) {
   return `${tmuxName(id)}:`;
 }
 
-function shellQuote(value) {
-  const text = String(value);
-  if (/[\x00-\x1f\x7f]/.test(text)) {
-    throw sessionError("EBADARG", "command arguments cannot contain control characters");
-  }
-  return `'${text.replace(/'/g, `'\"'\"'`)}'`;
-}
-
-function shellCommand(args) {
-  return args.map(shellQuote).join(" ");
-}
-
-function recoverableAgentCommand(args, target) {
-  const markShell = shellCommand([
-    config.tmuxBin, "-L", config.tmuxSocket,
-    "set-option", "-t", target, "@omp_status", "shell",
-  ]);
-  const flushInput = shellCommand([
-    "/usr/bin/perl", "-MPOSIX=tcflush,TCIFLUSH", "-e",
-    "defined(tcflush(STDIN, TCIFLUSH)) or exit 1",
-  ]);
-  // Revoke Chat first, then discard bytes accepted during OMP's exit race
-  // before an interactive shell can read from the shared pane PTY.
-  const recover = `${markShell} && ${flushInput} && exec "\${SHELL:-/bin/zsh}" -l`;
-  const body = `${shellCommand(args)}; ${recover}; exec /usr/bin/tail -f /dev/null`;
-  return `exec "\${SHELL:-/bin/zsh}" -lc ${shellQuote(body)}`;
-}
-
-async function launchAgentPane(pane, target, cwd, args) {
-  requireResult(await tmux([
-    "respawn-pane", "-k", "-c", cwd, "-t", pane, recoverableAgentCommand(args, target),
-  ]));
-}
-function ompCommand(id) {
+// Every agent launch, TUI or RPC, builds its omp argv here so create, restore,
+// reload, runner switches and RPC relaunches cannot drift apart. The runners
+// differ only in mode flags and in who publishes status (the TUI loads the
+// status extension; the bridge publishes itself).
+function ompEnv(id) {
   return [
     "/usr/bin/env",
     "OMP_PROFILE=",
@@ -192,9 +165,34 @@ function ompCommand(id) {
     `OMP_WEB_STATUS_TARGET=${tmuxPane(id)}`,
     `OMP_WEB_TMUX_SOCKET=${config.tmuxSocket}`,
     `OMP_WEB_TMUX_BIN=${config.tmuxBin}`,
-    config.ompBin,
-    "--extension", STATUS_EXTENSION,
   ];
+}
+
+function ompLaunchArgs({ profile, sessionDir, source, fork = false, model, noTitle }) {
+  const args = [];
+  if (profile) args.push(`--profile=${profile}`);
+  args.push(`--session-dir=${sessionDir}`);
+  if (source) args.push(fork ? "--fork" : "-r", source);
+  if (model) args.push("--model", model);
+  // Verified against the installed binary (v18.2.10): --no-title disables
+  // title auto-generation for the run.
+  if (noTitle) args.push("--no-title");
+  return args;
+}
+
+function paneCommandFor(id, runnerName, args) {
+  if (runnerName === "rpc") {
+    return runner.rpcPaneCommand([
+      ...ompEnv(id),
+      `OMP_WEB_RPC_IDLE_MINUTES=${config.rpcIdleMinutes}`,
+      process.execPath, runner.BRIDGE, runner.socketPath(id), "--",
+      config.ompBin, "--mode", "rpc-ui", "--no-ui", ...args,
+    ]);
+  }
+  return runner.recoverableAgentCommand(
+    [...ompEnv(id), config.ompBin, "--extension", STATUS_EXTENSION, ...args],
+    tmuxPane(id)
+  );
 }
 
 
@@ -314,16 +312,19 @@ function sessionFromLine(line) {
     name, folder, profile, type, rawStatus, rawStatusAt, rawRuntimeActivity,
     paneCommand, title, created, attached, windows, sessionActivity, pinned, source,
     rawThinking, rawThinkingAt, rawLaunchModel, rawLaunchedAt, rawNoTitle, rawTitleLock,
+    rawRunner, rawUi,
   ] = line.split("\t");
   const id = name.slice(config.sessionPrefix.length);
   const sessionProfile = profile || "default";
   const sessionType = type === "shell" ? "shell" : "agent";
+  // Sessions created before runners existed have no @omp_runner and run the TUI.
+  const sessionRunner = sessionType === "shell" ? null : rawRunner === "rpc" ? "rpc" : "tui";
   const publishedStatusAt = Number(rawStatusAt) || 0;
   const transcript = sessionType === "agent"
     ? resolveTranscript(id, sessionProfile, source)
     : "";
   const { status, statusAt } = normalizedSessionStatus(
-    sessionType, rawStatus, publishedStatusAt, paneCommand, transcript
+    sessionType, rawStatus, publishedStatusAt, paneCommand, transcript, sessionRunner
   );
   const persistedTitle = transcript ? readTranscriptTitle(transcript) : "";
   // Manual renames lock @omp_title against transcript auto-titling so a
@@ -342,6 +343,11 @@ function sessionFromLine(line) {
     && rawRuntimeActivity === "compaction"
     ? rawRuntimeActivity
     : "";
+  // Only a live bridge clears its question; a fresh "waiting" heartbeat is
+  // the proof that the published question is still the pending one.
+  const ui = sessionRunner === "rpc" && status === "waiting" && rawStatus === "waiting"
+    ? parseUi(rawUi)
+    : null;
   // The extension clears this when reasoning ends, but a hard kill cannot; a
   // short staleness window keeps a dead headline from outliving the turn.
   const thinkingAt = Number(rawThinkingAt) || 0;
@@ -372,11 +378,30 @@ function sessionFromLine(line) {
     thinking,
     launchModel: String(rawLaunchModel || "").slice(0, 256),
     launchedAt: Number(rawLaunchedAt) || 0,
+    runner: sessionRunner,
+    ui,
   };
 }
 
 function transcriptSizeOf(file) {
   try { return fs.statSync(file).size; } catch { return 0; }
+}
+
+const UI_METHODS = new Set(["select", "confirm", "input", "editor"]);
+function parseUi(raw) {
+  let value;
+  try { value = JSON.parse(raw || "null"); } catch { return null; }
+  if (!value || typeof value !== "object" || typeof value.id !== "string" || !UI_METHODS.has(value.method)) return null;
+  const text = (item, max) => (typeof item === "string" ? item.slice(0, max) : "");
+  const ui = {
+    id: text(value.id, 128),
+    method: value.method,
+    title: text(value.title, 500),
+    options: Array.isArray(value.options) ? value.options.slice(0, 24).map((option) => text(option, 200)) : [],
+    placeholder: text(value.placeholder, 200) || null,
+  };
+  if (typeof value.message === "string" && value.message) ui.message = text(value.message, 500);
+  return ui;
 }
 
 async function list() {
@@ -731,7 +756,8 @@ async function create({ name, folder, profile, type = "agent", resume, noTitle, 
   requireResult(await tmux(["set-option", "-t", target, "@omp_folder", cwd]));
   requireResult(await tmux(["set-option", "-t", target, "@omp_profile", prof || "default"]));
   requireResult(await tmux(["set-option", "-t", target, "@omp_type", sessionType]));
-  const initialStatus = sessionType === "shell" ? "shell" : "starting";
+  // New agent sessions start as an rpc holder: nothing runs until Chat sends.
+  const initialStatus = sessionType === "shell" ? "shell" : "idle";
   const createdAt = Date.now();
   requireResult(await tmux(["set-option", "-t", target, "@omp_status", initialStatus]));
   requireResult(await tmux(["set-option", "-t", target, "@omp_status_at", String(createdAt)]));
@@ -770,26 +796,17 @@ async function create({ name, folder, profile, type = "agent", resume, noTitle, 
 
   // A session dir belongs to exactly one OMP profile home. Cross-profile
   // reloads fork from this transcript into the target profile's own directory.
-  // The pane wrapper launches OMP without simulated typing, then returns to a
-  // recoverable login shell when OMP exits.
-  // create() historically launched without -r: a brand-new id owns an empty
-  // dir, so there was nothing to resume. After tmux-server loss the same id
-  // is recreated with surviving transcripts, and a fresh launch drops into
-  // the resume picker instead of the work. Default to resuming the largest
-  // substantive transcript under this profile (never another profile's);
-  // pass resume:false for a clean start.
+  // omp itself starts on the first Chat send (or when Terminal switches the
+  // session to the TUI), resuming this session's conversation from disk, so a
+  // restore after tmux-server loss picks up the work instead of a fresh run.
+  // resume:false asks for a clean start; the first launch honours it once.
   const sdir = profileSessionDirFor(id, prof || "default");
   fs.mkdirSync(sdir, { recursive: true });
-  const command = ompCommand(id);
-  if (prof) command.push(`--profile=${prof}`);
-  command.push(`--session-dir=${sdir}`);
-  // Verified against the installed binary (v18.2.10): --no-title disables
-  // title auto-generation for the run.
-  if (noTitle) command.push("--no-title");
-  const resumeSource = resume === false ? null : bestResumeSource(id, prof || "default");
-  if (resumeSource) command.push("-r", resumeSource);
-  const pane = await resolvePane(id);
-  await launchAgentPane(pane, target, cwd, command);
+  requireResult(await tmux(["set-option", "-t", target, "@omp_runner", "rpc"]));
+  if (resume === false && runner.resumeSourceFor(id, prof || "default")) {
+    requireResult(await tmux(["set-option", "-t", target, "@omp_noresume", "1"]));
+  }
+  await startHolder(id, cwd);
   rememberSession(record);
 
   return get(id);
@@ -926,9 +943,266 @@ async function scroll(id, direction, steps = 2) {
 
 async function killNow(id) {
   await bootstrap();
+  // omp writes its exit record while it shuts down. Letting the bridge finish
+  // that first keeps a Delete from having the session dir recreated behind it.
+  const session = await get(id);
+  if (session && session.runner === "rpc") await stopBridge(id);
   requireResult(await tmux(["kill-session", "-t", tmuxName(id)]));
   forgetSession(id);
   return true;
+}
+
+// ---- Runners ------------------------------------------------------------------
+// An agent session's pane runs either the interactive TUI (`tui`) or, for
+// `rpc`, an idle holder that becomes the RPC bridge while Chat needs omp.
+// Every function here runs inside the session's operation queue.
+const RPC_START_TIMEOUT_MS = 30_000;
+const BRIDGE_STOP_TIMEOUT_MS = 12_000;
+const BUSY_STATUSES = new Set(["working", "waiting", "starting"]);
+const ABORT_KEYS = new Set(["Escape", "C-c"]);
+
+async function requireAgentSession(id) {
+  const session = await get(id);
+  if (!session) throw sessionError("ENOSESSION", "session not found");
+  if (session.type === "shell") {
+    throw sessionError("EBADSESSIONTYPE", "OMP is not running in this session");
+  }
+  return session;
+}
+
+async function paneCommandOf(id) {
+  const result = await tmux(["display-message", "-p", "-t", tmuxPane(id), "#{pane_current_command}"]);
+  return result.empty ? "" : result.stdout.trim().split(/\r?\n/).at(-1);
+}
+
+async function startHolder(id, cwd) {
+  const pane = await resolvePane(id);
+  const target = tmuxPane(id);
+  runner.prepareSocket(id);
+  requireResult(await tmux([
+    "set-option", "-t", target, "@omp_runner", "rpc",
+    ";", "set-option", "-t", target, "@omp_status", "idle",
+    ";", "set-option", "-t", target, "@omp_status_at", String(Date.now()),
+    ";", "set-option", "-t", target, "@omp_activity", "",
+    ";", "set-option", "-t", target, "@omp_thinking", "",
+  ]));
+  await tmux(["set-option", "-t", target, "-u", "@omp_ui"]).catch(() => {});
+  requireResult(await tmux(["respawn-pane", "-k", "-c", cwd, "-t", pane, runner.holderPaneCommand()]));
+}
+
+async function launchAgent(id, runnerName, cwd, args) {
+  const pane = await resolvePane(id);
+  const target = tmuxPane(id);
+  if (runnerName === "rpc") runner.prepareSocket(id);
+  const command = paneCommandFor(id, runnerName, args);
+  requireResult(await tmux([
+    "set-option", "-t", target, "@omp_runner", runnerName,
+    ";", "set-option", "-t", target, "@omp_status", "starting",
+    ";", "set-option", "-t", target, "@omp_status_at", String(Date.now()),
+    ";", "set-option", "-t", target, "@omp_activity", "",
+  ]));
+  await tmux(["set-option", "-t", target, "-u", "@omp_ui"]).catch(() => {});
+  requireResult(await tmux(["respawn-pane", "-k", "-c", cwd, "-t", pane, command]));
+  if (runnerName === "rpc") await waitForBridge(id);
+}
+
+// Launch args for (re)starting omp on this session's own conversation: the
+// same profile, session dir and title rules as create/reload.
+async function agentLaunchArgs(id, session) {
+  const profile = session.profile || "default";
+  const sessionDir = profileSessionDirFor(id, profile);
+  fs.mkdirSync(sessionDir, { recursive: true });
+  const target = tmuxPane(id);
+  const noResume = await tmux(["show-option", "-t", target, "-v", "@omp_noresume"])
+    .then((result) => result.stdout.trim() === "1")
+    .catch(() => false);
+  let source = runner.resumeSourceFor(id, profile);
+  if (noResume) {
+    // A clean start holds until this session has written its own
+    // conversation. Clearing on the first launch let a failed start, or a
+    // Terminal visit that never typed anything, resume the older one.
+    const created = Number(session.created) || 0;
+    let mtime = 0;
+    try { mtime = source ? fs.statSync(source).mtimeMs : 0; } catch {}
+    if (source && created && mtime >= created) {
+      await tmux(["set-option", "-t", target, "-u", "@omp_noresume"]).catch(() => {});
+    } else {
+      source = null;
+    }
+  }
+  return ompLaunchArgs({
+    profile: profile === "default" ? "" : profile,
+    sessionDir,
+    source,
+    noTitle: session.notitle,
+  });
+}
+
+async function waitForBridge(id) {
+  const started = Date.now();
+  while (Date.now() - started < RPC_START_TIMEOUT_MS) {
+    try {
+      const state = await runner.bridgeOp(id, { op: "state" }, 5_000);
+      if (state && state.ready) return state;
+    } catch (error) {
+      if (error.code !== "ENOBRIDGE") throw error;
+      // The bridge removes its socket on exit and the pane falls back to the
+      // holder, so `tail` after the launch means omp could not start.
+      if (Date.now() - started > 1_500 && (await paneCommandOf(id)) === "tail") {
+        throw sessionError("ERUNNER", "omp exited while starting; open Terminal to see why");
+      }
+    }
+    await sleep(200);
+  }
+  throw sessionError("ERUNNER", "omp did not start in time");
+}
+
+async function waitForBridgeExit(id) {
+  const started = Date.now();
+  while (Date.now() - started < BRIDGE_STOP_TIMEOUT_MS) {
+    try {
+      await runner.bridgeOp(id, { op: "state" }, 2_000);
+    } catch (error) {
+      if (error.code === "ENOBRIDGE") return;
+    }
+    await sleep(200);
+  }
+}
+
+async function stopBridge(id) {
+  try {
+    await runner.bridgeOp(id, { op: "stop" }, BRIDGE_STOP_TIMEOUT_MS);
+  } catch (error) {
+    // A bridge that will not stop is replaced anyway: respawn-pane -k
+    // signals it, and it closes omp's stdin on that signal too.
+    if (error.code !== "ENOBRIDGE") console.error(`bridge stop failed (${id}): ${error.message}`);
+  }
+}
+
+// Connect, don't trust the socket file: a bridge that died leaves a holder
+// pane, and a failed connect is the signal to start a new one.
+async function ensureBridge(id, session) {
+  try {
+    const state = await runner.bridgeOp(id, { op: "state" }, 5_000);
+    if (!state.stopping) return state.ready ? state : waitForBridge(id);
+    await waitForBridgeExit(id);
+  } catch (error) {
+    if (error.code !== "ENOBRIDGE") throw error;
+  }
+  await launchAgent(id, "rpc", session.folder || config.workspaceRoot, await agentLaunchArgs(id, session));
+  return null;
+}
+
+async function withBridge(id, session, payload, timeoutMs) {
+  for (let attempt = 0; ; attempt += 1) {
+    await ensureBridge(id, session);
+    try {
+      return await runner.bridgeOp(id, payload, timeoutMs);
+    } catch (error) {
+      // The bridge idled out between the check and the request.
+      if (attempt === 0 && (error.code === "ESTOPPING" || error.code === "ENOBRIDGE")) continue;
+      throw error;
+    }
+  }
+}
+
+// A reload's --model is only a launch flag; set_model writes model_change, so
+// a later idle relaunch (which resumes without --model) keeps the choice.
+async function persistLaunchModel(id, profile, chosenModel) {
+  const identity = launchIdentityFor(profile, chosenModel);
+  if (!identity || !identity.provider) return;
+  try {
+    await runner.bridgeOp(id, {
+      op: "model",
+      provider: identity.provider,
+      modelId: identity.model,
+      level: identity.effort || undefined,
+    }, 65_000);
+  } catch (error) {
+    console.error(`reload model persist failed (${id}): ${error.message}`);
+  }
+}
+
+// tmux session_activity moves only with client input, and Chat sends into a
+// TUI never touch it, so the transcript's mtime counts as activity too.
+async function idleFor(id, session, idleMs) {
+  if (session.attached > 0 || session.status === "shell") return false;
+  const transcript = await trackedTranscript(id, session.profile);
+  const last = Math.max(Number(session.lastActivity) * 1000 || 0, fileMtime(transcript));
+  return Date.now() - last >= idleMs;
+}
+
+async function setRunnerNow(id, targetRunner, { idleMs = null } = {}) {
+  await bootstrap();
+  const session = await get(id);
+  if (!session) throw sessionError("ENOSESSION", "session not found");
+  if (session.type === "shell") throw sessionError("EBADSESSIONTYPE", "shell sessions have no runner");
+  if (session.runner === targetRunner) return session;
+  const cwd = session.folder || config.workspaceRoot;
+  if (targetRunner === "tui") {
+    let state = null;
+    try {
+      state = await runner.bridgeOp(id, { op: "state" }, 5_000);
+    } catch (error) {
+      if (error.code !== "ENOBRIDGE") throw error;
+    }
+    if (state && !state.stopping && (state.streaming || !state.settled || state.ui)) {
+      throw sessionError("EBUSY", "Finishing the current turn; try again or Stop");
+    }
+    if (state) await stopBridge(id);
+    await launchAgent(id, "tui", cwd, await agentLaunchArgs(id, session));
+    return get(id);
+  }
+  if (BUSY_STATUSES.has(session.status)) {
+    throw sessionError("EBUSY", "Finishing the current turn; try again or Stop");
+  }
+  if (idleMs !== null && !(await idleFor(id, session, idleMs))) return null;
+  await startHolder(id, cwd);
+  return get(id);
+}
+
+function setRunner(id, targetRunner, options = {}) {
+  if (targetRunner !== "rpc" && targetRunner !== "tui") {
+    return Promise.reject(sessionError("EBADRUNNER", "runner must be rpc or tui"));
+  }
+  return enqueueSessionOperation(id, () => setRunnerNow(id, targetRunner, options));
+}
+
+function answer(id, reply = {}) {
+  const payload = { op: "answer", requestId: reply.requestId };
+  if (typeof reply.requestId !== "string" || !reply.requestId || reply.requestId.length > 128) {
+    return Promise.reject(sessionError("EBADANSWER", "requestId is required"));
+  }
+  const kinds = [reply.cancelled === true, typeof reply.confirmed === "boolean", typeof reply.value === "string"];
+  if (kinds.filter(Boolean).length !== 1) {
+    return Promise.reject(sessionError("EBADANSWER", "send exactly one of value, confirmed, or cancelled"));
+  }
+  if (reply.cancelled === true) payload.cancelled = true;
+  else if (typeof reply.confirmed === "boolean") payload.confirmed = reply.confirmed;
+  else if (Buffer.byteLength(reply.value, "utf8") > MAX_TEXT_BYTES) {
+    return Promise.reject(sessionError("EBADANSWER", `value exceeds maximum length (${MAX_TEXT_BYTES} bytes)`));
+  } else payload.value = reply.value;
+  return enqueueSessionOperation(id, async () => {
+    const session = await requireAgentSession(id);
+    if (session.runner !== "rpc") throw sessionError("EBADRUNNER", "answer this question in Terminal");
+    try {
+      await runner.bridgeOp(id, payload, 10_000);
+    } catch (error) {
+      if (error.code === "ENOBRIDGE" || error.code === "ESTOPPING") {
+        throw sessionError("ECONFLICT", "that question is no longer waiting for an answer");
+      }
+      throw error;
+    }
+  });
+}
+
+// Live model switch for an rpc session; a TUI session types /switch instead.
+function setRuntimeModel(id, { provider, modelId, level = null }) {
+  return enqueueSessionOperation(id, async () => {
+    const session = await requireAgentSession(id);
+    if (session.runner !== "rpc") throw sessionError("EBADRUNNER", "session runs the TUI");
+    return withBridge(id, session, { op: "model", provider, modelId, level: level || undefined }, 65_000);
+  });
 }
 
 async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
@@ -998,23 +1272,23 @@ async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
     }
   }
 
-  const command = ompCommand(id);
-  if (newProfile) command.push(`--profile=${newProfile}`);
-  command.push(`--session-dir=${sdir}`, crossProfile ? "--fork" : "-r", forkSource);
-  if (chosenModel) command.push("--model", chosenModel);
   // The dialog choice wins; otherwise a stored opt-out carries over, and
   // older sessions without one keep auto-titling. Unchecking clears the
   // stored option so the session returns to auto-titling.
   const noTitleActive = noTitle === true || (noTitle !== false && s.notitle);
-  if (noTitleActive) command.push("--no-title");
+  const args = ompLaunchArgs({
+    profile: newProfile,
+    sessionDir: sdir,
+    source: forkSource,
+    fork: crossProfile,
+    model: chosenModel,
+    noTitle: noTitleActive,
+  });
 
-  const pane = await resolvePane(id);
   const target = tmuxPane(id);
-  // Replace the pane process directly. Typing a quoted command into a new
-  // login shell races interactive startup prompts such as Oh My Zsh updates.
-  // The wrapper returns to a recoverable login shell after OMP exits.
-  requireResult(await tmux(["set-option", "-t", target, "@omp_status", "starting"]));
-  requireResult(await tmux(["set-option", "-t", target, "@omp_status_at", String(Date.now())]));
+  // The running bridge must let go of the transcript before the reloaded omp
+  // opens or forks it.
+  if (s.runner === "rpc") await stopBridge(id);
   requireResult(await tmux(["set-option", "-t", target, "@omp_profile", newProfile || "default"]));
   if (noTitle === true) {
     requireResult(await tmux(["set-option", "-t", target, "@omp_notitle", "1"]));
@@ -1032,6 +1306,12 @@ async function reloadProfileNow(id, { profile, model, noTitle } = {}) {
   if (chosenModel) await tmux(["set-option", "-t", target, "@omp_model", chosenModel]);
   else await tmux(["set-option", "-t", target, "-u", "@omp_model"]);
   await tmux(["set-option", "-t", target, "@omp_model_at", String(Date.now())]);
+  // Replace the pane process directly. Typing a quoted command into a new
+  // login shell races interactive startup prompts such as Oh My Zsh updates.
+  // An rpc session reloads right away, so the new runtime is live, not
+  // deferred to the next send.
+  await launchAgent(id, s.runner, cwd, args);
+  if (s.runner === "rpc" && chosenModel) await persistLaunchModel(id, targetProfile, chosenModel);
   rememberSession({
     id,
     folder: cwd,
@@ -1175,22 +1455,16 @@ function requireOmpCommand(result) {
   return checked;
 }
 
-async function resolveAgentInputPane(id) {
-  const session = await get(id);
-  if (!session) throw sessionError("ENOSESSION", "session not found");
-  if (session.type === "shell") {
-    throw sessionError("EBADSESSIONTYPE", "OMP is not running in this session");
-  }
+function requireTuiInputReady(session) {
   if (session.status === "starting") {
     throw sessionError("EBUSY", "OMP is still starting");
   }
-
-  return resolvePane(id);
 }
 
 
-// Inject a prompt into the session's OMP TUI composer using bracketed paste so
-// embedded newlines stay in the composer rather than submitting early.
+// rpc sessions prompt omp over the bridge, starting it on demand. TUI sessions
+// get the prompt injected into the composer using bracketed paste so embedded
+// newlines stay in the composer rather than submitting early.
 async function sendText(id, text) {
   if (typeof text !== "string" || !text.trim()) {
     throw sessionError("EBADTEXT", "text must be a non-empty, non-whitespace string");
@@ -1200,7 +1474,13 @@ async function sendText(id, text) {
   }
 
   return enqueueSessionOperation(id, async () => {
-    const pane = await resolveAgentInputPane(id);
+    const session = await requireAgentSession(id);
+    if (session.runner === "rpc") {
+      await withBridge(id, session, { op: "prompt", text }, 40_000);
+      return;
+    }
+    requireTuiInputReady(session);
+    const pane = await resolvePane(id);
     // Unique per request: even different sessions must not replace a global
     // tmux paste buffer before its owning command queue consumes it.
     const buffer = `omp-web-${process.pid}-${++inputBufferSeq}`;
@@ -1244,7 +1524,23 @@ async function sendKeys(id, keys) {
     }
   }
   return enqueueSessionOperation(id, async () => {
-    const pane = await resolveAgentInputPane(id);
+    const session = await requireAgentSession(id);
+    if (session.runner === "rpc") {
+      // Chat's Stop is the only key an rpc session understands; anything
+      // else is a TUI interaction and belongs in Terminal.
+      if (!keys.every((key) => ABORT_KEYS.has(key))) {
+        throw sessionError("EBADKEYS", "only Escape or C-c reach a Chat session; open Terminal for other keys");
+      }
+      try {
+        await runner.bridgeOp(id, { op: "abort" }, 15_000);
+      } catch (error) {
+        // Nothing is running, so there is nothing to stop.
+        if (error.code !== "ENOBRIDGE" && error.code !== "ESTOPPING") throw error;
+      }
+      return;
+    }
+    requireTuiInputReady(session);
+    const pane = await resolvePane(id);
     requireOmpCommand(await tmux(cancelCopyModeThen(
       pane,
       guardedOmpCommand(pane, ["send-keys", "-t", pane, ...keys]),
@@ -1286,6 +1582,6 @@ async function contextWindowFor(profile, provider, model) {
 module.exports = {
   list, get, exists, create, setPinned, renameTitle, scroll, scrollState, setScrollPosition,
   kill, reloadProfile, tmuxName, tmuxPane, resolvePane, bootstrap, OPT_KEYS,
-  sendText, sendKeys, configuredEffortFor, contextWindowFor, launchIdentityFor, restorable,
-  restore, forgetGhost, footprint, purge,
+  sendText, sendKeys, answer, setRuntimeModel, setRunner, configuredEffortFor, contextWindowFor,
+  launchIdentityFor, restorable, restore, forgetGhost, footprint, purge,
 };
