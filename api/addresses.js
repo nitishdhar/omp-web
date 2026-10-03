@@ -49,19 +49,20 @@ function alive(pid) {
   try { process.kill(pid, 0); return true; } catch (error) { return error.code === "EPERM"; }
 }
 
-// -> { host, port }: the env when set here, else the running server's record,
-// else config defaults.
+// -> { host, port }, each from this process's env when set, else the running
+// server's record, else config defaults. Per field: a shell can carry one of
+// the two (e.g. a port exported for something else).
 function bind() {
-  if (!process.env.OMP_WEB_HOST && !process.env.OMP_WEB_PORT) {
-    try {
-      const saved = JSON.parse(fs.readFileSync(BIND_FILE, "utf8"));
-      if (Number.isInteger(saved.pid) && saved.pid !== process.pid && alive(saved.pid)
-        && typeof saved.host === "string" && Number.isInteger(saved.port)) {
-        return { host: saved.host, port: saved.port };
-      }
-    } catch {}
-  }
-  return { host: config.host, port: config.port };
+  let saved = null;
+  try {
+    const value = JSON.parse(fs.readFileSync(BIND_FILE, "utf8"));
+    if (Number.isInteger(value.pid) && value.pid !== process.pid && alive(value.pid)
+      && typeof value.host === "string" && Number.isInteger(value.port)) saved = value;
+  } catch {}
+  return {
+    host: process.env.OMP_WEB_HOST || saved?.host || config.host,
+    port: process.env.OMP_WEB_PORT ? config.port : (saved?.port ?? config.port),
+  };
 }
 
 // -> normalized origin, or throws EBADSETTING. Paths are refused because every
