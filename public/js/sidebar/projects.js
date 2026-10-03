@@ -71,6 +71,11 @@ function openSessionMenu(anchor, session) {
     icon: "x",
     danger: true,
     action: () => emit("session:kill", session.id),
+  }, {
+    label: "Delete session…",
+    icon: "trash",
+    danger: true,
+    action: () => emit("session:delete", session.id),
   });
   menu.show(anchor, session.title || session.id, items, sessionDetail(session));
 }

@@ -98,6 +98,20 @@ async function handleApi(req, res, url) {
       return sendError(res, error);
     }
   }
+  if (req.method === "GET" && sub[0] === "sessions" && sub[1] && sub[2] === "footprint" && sub.length === 3) {
+    try {
+      return sendJson(res, 200, await sessions.footprint(sub[1]));
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
+  if (req.method === "DELETE" && sub[0] === "sessions" && sub[1] && sub[2] === "data" && sub.length === 3) {
+    try {
+      return sendJson(res, 200, { ok: true, freed: await sessions.purge(sub[1]) });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
   if (sub[0] === "sessions" && sub[1] && sub[2] === "chat") {
     return handleChat(req, res, sub, url);
   }

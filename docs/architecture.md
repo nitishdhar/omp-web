@@ -69,6 +69,7 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | `api/preview-roots.js` | **File viewer folders**, edited in Settings (`GET`/`PUT /api/settings/preview-roots`) and stored in `~/.omp-web/settings.json` (0600, atomic write), read on every request so changes apply without a restart. Extra roots must be existing absolute (or `~/`) directories; `/`, `$HOME` and its ancestors, and anything overlapping omp-web's own data directory are refused. Inside an extra root, hidden paths, credential-shaped names (`auth`, `oauth`, `credentials`, `secret`, `token`, `password`, `api_key`) and `mcp.json`/`settings.local.json` are never served; the check runs on the opened descriptor's path. Elided citations (`…/Gift Deed/x.pdf`) resolve by unique suffix in the session folder, then in these roots. This is not a boundary against the token holder (the terminal is a full shell); it keeps the web route from serving the whole home directory. |
 | `sessions.js` | tmux-backed agent and shell sessions (`tmux -L omp-web`). Every operation resolves the exact pane id before acting; chat input, keys, kill, and profile reload share a bounded per-session queue. Per-session state lives in `@omp_*` user options (folder/profile/type/status/status_at/activity/title/created/pinned/transcript/thinking/thinking_at/model/model_at — it dies with the session). Shell sessions stop after tmux opens its configured login shell; agent sessions launch OMP with the status extension. Lists reconcile the bounded title record and a cached 128 KiB transcript tail for agent sessions, so `/rename` and lifecycle status reach the dashboard even for live processes launched before the extension. `lastActivity` comes from tmux `session_activity`. |
 | `sessions/status.js` | Pure status-derivation core (required by `sessions.js`; `sessionFromLine` keeps the `@omp_*` parse context). Owns the staleness constants, the 128-entry transcript-tail cache, and the four derivation functions with their precedence — live pane identity > fresh heartbeat (≤90s) > transcript tail > idle — plus the truth table in its header comment. The extension keeps a mirror comment, not shared code (separate runtime). |
+| `sessions/purge.js` | A session's on-disk data for **Delete**: `<sessionsDir>/<id>` and `<attachmentsDir>/<id>`. Measures them with `lstat` (links count as themselves) and removes them, unlinking symlinks rather than following them. `sessions.js` owns the case-twin guard, stopping a live session, and the registry purge. |
 | `registry.js` | The ONE sanctioned durable exception: ghost set `{entries, forgotten}` for boot recovery, never live state. Never read for liveness; `forgotten` suppresses transcript ghosts only (200-cap, `upsert` clears a re-created id). Reads go through a stat-keyed cache (one `statSync`, copies out so callers cannot poison it); explicit mutations stay synchronous, while adopt-on-list collects drift and flushes ONE deferred `writeRegistry`. Empty/corrupt/single-bad-record inputs degrade to the transcript fallback, never throw. |
 | `extensions/session-status.mjs` | OMP lifecycle adapter. Session start, agent, ask, approval, retry/compaction, and shutdown hooks publish precise status plus a heartbeat into the owning tmux session without adding a sidecar process or state file. **Only the interactive top-level session publishes**: subagents run in-process with their own runner and inherit this extension plus `OMP_WEB_STATUS_TARGET`, so every handler guards on `ctx.hasUI`. Writes dedupe against the last value tmux accepted, so a failed write retries on the next transition. Auto-compaction additionally publishes a bounded `compaction` activity until `auto_compaction_end`. A successful terminal agent turn publishes Recently done, then the heartbeat settles it to Idle after five minutes unless new work supersedes it. `message_update` reasoning deltas publish a throttled one-line headline into `@omp_thinking`/`@omp_thinking_at`, cleared when text, a tool call, or the turn begins. |
 | `transcripts.js` | Owned OMP JSONL discovery and bounded title reads; OMP remains the title writer and session record authority. The `@omp_transcript` tmux pin is a **hint, not an override**: resolution picks the most recently written transcript this session id owns (its profile directory, the legacy id directory, and every sibling profile directory), so a profile/model switch inside the TUI cannot strand chat on a dead file. Subagent transcripts live one level deeper and are never adopted. |
@@ -319,7 +320,8 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   folder with no same-name match reads "folder missing" and its Restore is
   disabled. A failed restore names the session and the reason. `registry.remove`
   now keeps the forgotten list; it used to drop it on every kill or Forget,
-  bringing forgotten sessions back.
+  bringing forgotten sessions back. Forget now also always records the id as
+  forgotten (see Ghost restore below).
 - Search replaces grouping with one flat, created-order list of live matches,
   then ghost matches under a **Not running** heading, then folders whose *name*
   matches (so a project can be found to start in). `/` focuses search and
@@ -330,7 +332,7 @@ the bottom. Terminal copy-mode/history scrolling is independent.
 - **Pin** is tmux option `@omp_pinned`, changed through
   `PUT /api/sessions/:id/pin`. Pin dies with the session. Desktop ≥1100px may
   show a tmux window-count badge; compact layouts expose a persistent 40px
-  action target. Session actions: Pin/Unpin, Reload profile…, Kill. Folder
+  action target. Session actions: Pin/Unpin, Reload profile…, Kill, Delete…. Folder
   actions: copy full path, New session here. Every one of these reports through
   the shared notice toast (`public/js/notice.js`, rendered in `#copy-flash`).
 
@@ -585,9 +587,10 @@ Transport bounds checklist (every number enforced in code, not advisory):
   (200 ids, oldest dropped first), and is cleared for an id by `upsert()`, so
   a restored or recreated session reappears normally. The sidebar renders
   dimmed ghost rows under their folder (row menu: Restore / Copy folder
-  path / Forget) with a **Restore all** banner; clicking a ghost row opens a
-  detail view in the main pane (`#ghost-mode`: full folder path, type/profile,
-  history source, activity dates, Restore / Copy folder path / Forget) so the
+  path / Forget (hide) / Delete…) with a **Restore all** banner; clicking a
+  ghost row opens a detail view in the main pane (`#ghost-mode`: full folder
+  path, type/profile, history source, activity dates, Restore / Copy folder
+  path / Forget / Delete…) so the
   restore decision has room. Selecting a ghost is mutually exclusive with a
   live session; restoring a single ghost opens it live.
   `POST /api/sessions/restore` accepts `{"ids":[...]|"all"}`, restores
@@ -595,9 +598,21 @@ Transport bounds checklist (every number enforced in code, not advisory):
   with `-r`, shells start fresh), re-applies saved titles/pins, and returns
   per-id `{ok, session|code}` — one failure never aborts the batch.
   `DELETE /api/sessions/:id/ghost` calls `sessions.js forgetGhost(id)`: it
-  drops a registry entry, or marks a transcript-fallback ghost forgotten via
-  `registry.forget(id)`, or throws `ENOSESSION` when neither exists (the
-  route maps that to 404). Neither path ever deletes a transcript. `list()`
+  drops any registry entry and always records the id in `forgotten`, or throws
+  `ENOSESSION` when the session has neither an entry nor a transcript (the
+  route maps that to 404). Dropping the entry alone let the transcript scan
+  list the session again on the next refresh. Forget never deletes a file.
+- **Delete** is the irreversible counterpart (live row menu, ghost row menu,
+  ghost detail). `GET /api/sessions/:id/footprint` measures what it would
+  remove; `DELETE /api/sessions/:id/data` runs through the per-session queue,
+  stops the session if it is running, removes `<sessionsDir>/<id>` (every
+  profile's transcripts) and `<attachmentsDir>/<id>`, then drops the registry
+  entry and `forgotten` marker. Symlinks are unlinked, never followed, and
+  nothing outside those two directories is touched. macOS paths are
+  case-insensitive, so ids differing only in case share a data directory: when
+  another live, registered, or on-disk id matches case-insensitively the delete
+  is refused with `409 ECONFLICT`. The browser confirms with the measured size
+  first. `list()`
   also adopts live sessions missing from the registry (never the reverse:
   registry-only entries are ghosts, never auto-created).
 - `omp-web doctor`'s persistence check additionally reads the registry: a
