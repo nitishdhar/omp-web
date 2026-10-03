@@ -72,11 +72,12 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 
 | File | Role |
 |---|---|
-| `server.js` | Node HTTP + WebSocket only: static shell serving, `/api` dispatch (delegated), `/ws` PTY bridge, process guards. |
+| `server.js` | Node HTTP + WebSocket only: static shell serving, `/api` and `/panels` dispatch (delegated), `/ws` PTY bridge, process guards. |
 | `bin/omp-web.js` | macOS/Linux CLI: foreground start, non-destructive local setup, prerequisite checks, and explicit handoff to native OMP profile onboarding. `doctor` treats Linux as warn-only; every later row validates what actually matters there. |
 | `bin/postinstall.js` | Repairs executable permissions on installed node-pty spawn helpers, including hoisted dependency layouts. |
 | `api/routes.js` | REST route table. Session create/list/scroll/profile-reload/pin/delete operations use shared bounded request/error handling; `POST /api/sessions/:id/runner {runner}` switches an agent session between `rpc` and `tui` (`409 EBUSY` while a turn runs); `/api/meta` projects native profile names plus bounded, identifier-validated `modelRoles` provider/model/effort metadata; chat routes and session attachments delegate to their owning modules. |
 | `api/util.js` | Shared JSON response/error mapping and a 1 MB, strict-UTF-8 request-body reader. API responses are `no-store`. |
+| `api/panels.js` | Operator-configured panels (`OMP_WEB_PANELS`): startup validation (loopback `http://127.0.0.1:<port>` / `http://localhost:<port>` origins only, unique ids, bounded labels; any violation exits), and the `/panels/<id>/` reverse proxy. Streams method, query, body, status and headers both ways; drops hop-by-hop headers; sets upstream `Host` and `X-Forwarded-Host`/`-Proto`/`-Prefix`; passes `Origin` and custom headers unchanged; strips omp-web's `token` query param, `x-omp-web-token` header and panel cookie. Connect errors, resets and a 30 s connect timeout answer `502`. No WebSocket upgrades. `/api/meta` lists `{id, label}` only; the upstream URL never reaches the browser. |
 | `api/usage.js` | One-minute native `omp usage --json --redact` adapter. It aggregates configured profiles, deduplicates accounts by allowlisted usage fields, and strips account/credential metadata before returning dynamic provider limit data to the browser. |
 | `api/models.js` | Per-profile chat model catalog from native `omp models --json` (selector, name, supported thinking levels; 10-minute cache, `GET /api/profiles/:name/models`; run with the same profile environment as a session launch) and the in-session switch (`POST /api/sessions/:id/model {model, effort}`). The switch validates both values against the session's profile catalog. An rpc session switches through the bridge (`set_model`, `set_thinking_level`, starting omp if needed); a TUI session gets OMP's own `/switch <selector>[:<level>]` typed through `sendText` (same guard, queue, and composer clear as a Chat send). Either way OMP changes the live model and thinking level for that session only and records `model_change` (role `temporary`) and, when the level changed, `thinking_level_change`; no model request is made. A catalog failure is `503 EMODELSUNAVAILABLE`. |
 | `api/transcribe.js` | Voice-input transcription proxy. Accepts a short browser-recorded clip and forwards it to the configured OpenAI-compatible `/audio/transcriptions` endpoint; the provider key lives only in server config and never reaches the browser, and audio is held in memory, never written to disk. |
@@ -115,6 +116,7 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | `public/js/auth.js` | Token capture (URL → localStorage) plus the 401 gate UI. |
 | `public/js/dom.js` | DOM handle registry (`el`, `initDom`) plus the tiny `elem()` builder and `escapeHtml`. Builders return elements; no unescaped `innerHTML` with dynamic values. |
 | `public/js/ghost.js` | Ghost detail view: the main-pane surface for a dead (restorable) session — full folder path, type/profile, and history source so the restore decision has room. Main.js owns show/hide; this module only renders. |
+| `public/js/panels.js` | Panel view: sidebar-footer entries for each configured panel (hidden when none) and one full-pane iframe per opened panel, kept alive while hidden so switching away never reloads the app. Emits `panel:open`; main.js parks/resumes the live session exactly as for a ghost preview. |
 | `public/js/settings.js` | Settings sheet for scattered preferences and read-only profile visibility (native OMP owns profile config). |
 | `public/index.html` + `public/vendor/` | Static shell served verbatim: element ids (the API other modules build against), the `?v=`-pinned module scripts, and vendored xterm assets (no build step, no bundler). |
 | `scripts/check-events.mjs` | `npm run check:events`. Fails when a `public/js` module emits an event with no `get()` subscriber, or subscribes to one nothing emits — both previously shipped as silently dead buttons. |
@@ -373,7 +375,7 @@ the bottom. Terminal copy-mode/history scrolling is independent.
 ## Auth model
 
 - Auth is opt-in: a token from `OMP_WEB_TOKEN` or the home's `token` file
-  (`setup --token` creates one) is required on `/api` and `/ws` only when
+  (`setup --token` creates one) is required on `/api`, `/ws` and `/panels` only when
   configured. With no token the console runs OPEN on loopback, and the server
   refuses to start open on a non-loopback bind unless `OMP_WEB_ALLOW_OPEN=1`
   explicitly accepts that risk. Neither the startup log nor
@@ -390,6 +392,17 @@ the bottom. Terminal copy-mode/history scrolling is independent.
   differs from the request Host. Native clients without Origin require the
   token when one is configured. Reverse proxies must preserve the public Host
   header.
+- **API and WS are token-only** and never accept a cookie. **Panels alone**
+  (`/panels/*`) also accept a cookie derived from the token
+  (`omp_web_panel` = HMAC-SHA256(token, `"omp-web-panels:v1"`), compared in
+  constant time), because an iframe's own subrequests cannot carry the token
+  header. The cookie is `Path=/panels/; HttpOnly; SameSite=Strict` (plus
+  `Secure` when the effective proto is https) and is issued only after a
+  token-authenticated request: a `GET`/`HEAD` with `?token=` gets a `303` to
+  the same URL without the token and the `Set-Cookie`. Panels share the API's
+  same-origin check (`403 EORIGIN`). A panel is served from omp-web's origin,
+  so its scripts can reach anything omp-web's page can, including the stored
+  token: configure only apps trusted as much as omp-web itself.
 - This is trusted-owner access to a host shell, not a sandbox or multi-user
   service. Non-local use requires a trusted private network or secured HTTPS
   proxy. Provider credentials stay with OMP, not the browser.
@@ -687,8 +700,9 @@ Transport bounds checklist (every number enforced in code, not advisory):
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux server label. |
 | `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Settled, idle minutes before a Chat (rpc) session's omp exits; fractions allowed. |
 | `OMP_WEB_TUI_IDLE_MINUTES` | `30` | Quiet minutes before the reaper hands an unattached TUI back to rpc; fractions allowed. |
-| `OMP_WEB_TOKEN` | *(file)* | Access token; when set, `/api` and `/ws` require it. Falls back to `~/.omp-web/token` (`setup --token` creates it). |
+| `OMP_WEB_TOKEN` | *(file)* | Access token; when set, `/api`, `/ws` and `/panels` require it (panels also accept the derived panel cookie). Falls back to `~/.omp-web/token` (`setup --token` creates it). |
 | `OMP_WEB_ALLOW_OPEN` | empty | `1` permits an open console on a non-loopback bind. The server refuses open LAN binds without it. |
+| `OMP_WEB_PANELS` | empty | JSON array of `{"id","label","url"}` local web apps shown inside omp-web through `/panels/<id>/`. `url` must be exactly `http://127.0.0.1:<port>` or `http://localhost:<port>`; an invalid entry stops startup. See README → Panels. |
 | `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
 | `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this machine and sent only to the configured transcription service. |
 | `OMP_WEB_TRANSCRIBE_MODEL` | empty | Transcription model name. |

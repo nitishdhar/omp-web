@@ -97,6 +97,10 @@ const config = {
   // token: the server still refuses open non-loopback binds without it.
   allowOpen: process.env.OMP_WEB_ALLOW_OPEN === "1",
 
+  // Operator-configured panels: a JSON array of {id, label, url} naming local
+  // web apps to show inside omp-web. Validated at startup by api/panels.js.
+  panels: process.env.OMP_WEB_PANELS || "",
+
   // An rpc session's omp exits after this long settled with no Chat request;
   // the next send starts it again.
   rpcIdleMinutes: positiveMinutes("OMP_WEB_RPC_IDLE_MINUTES", 10),

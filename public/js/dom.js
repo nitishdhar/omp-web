@@ -39,6 +39,7 @@ export function initDom() {
     "chat-interrupt", "chat-voice", "chat-voice-status", "chat-advisor",
     "ghost-mode", "ghost-title", "ghost-summary", "ghost-meta",
     "ghost-back-btn", "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn", "ghost-delete-btn",
+    "panel-nav", "panel-mode",
   ].forEach(reg);
 }
 

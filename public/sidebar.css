@@ -283,6 +283,23 @@
 .settings-btn:hover { background: var(--row-hover); color: var(--text); }
 .settings-btn svg { width: 15px; height: 15px; }
 @media (max-width: 1099px) { .settings-btn { width: 44px; height: 44px; } .settings-btn svg { width: 18px; height: 18px; } }
+/* Panel entries share the footer with settings. A status line ("offline: …")
+   takes its own row above them instead of squeezing them to nothing. */
+.side-foot:has(.panel-nav:not([hidden])) { flex-wrap: wrap; }
+.side-foot:has(.panel-nav:not([hidden])) #side-foot { flex-basis: 100%; }
+.side-foot:has(.panel-nav:not([hidden])) #side-foot:empty { display: none; }
+.panel-nav { display: flex; flex: 1; min-width: 0; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+.panel-nav[hidden] { display: none; }
+.panel-link {
+  display: inline-flex; align-items: center; gap: 6px; flex: none; max-width: 160px; height: 26px;
+  padding: 0 8px; border: 0; border-radius: 6px; background: transparent; color: var(--faint);
+  font: 12px var(--font-ui);
+}
+.panel-link:hover { background: var(--row-hover); color: var(--text); }
+.panel-link[aria-current="page"] { background: var(--row-hover); color: var(--text); }
+.panel-link svg { flex: none; width: 15px; height: 15px; }
+.panel-link-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1099px) { .panel-link { height: 44px; padding: 0 12px; font-size: 13px; } .panel-link svg { width: 18px; height: 18px; } }
 
 /* Ghost rows: dead sessions offered for restore. Dimmed with a dashed
    outline so they read as "not running" without inventing a status literal —

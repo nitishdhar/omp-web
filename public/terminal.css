@@ -82,6 +82,23 @@
   visibility: hidden;
   pointer-events: none;
 }
+/* Panel view: an operator-configured local app, framed edge to edge over the
+   content host. #main's safe-area padding already keeps it clear of the home
+   indicator on phones. */
+#panel-mode { position: absolute; inset: 0; z-index: 2; background: var(--bg); }
+#panel-mode[hidden] { display: none !important; }
+/* Apps that paint no background expect the browser's white canvas. */
+.panel-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.panel-frame[hidden] { display: none; }
+#main.panel-active #term-wrap,
+#main.panel-active #chat-mode,
+#main.panel-active .mobile-composer-shell,
+#main.panel-active #quickkeys {
+  visibility: hidden;
+  pointer-events: none;
+}
+/* The connection badge describes a session; a panel has none. */
+#main.panel-active #conn { display: none; }
 /* The toggle exists at every width now: compact slides the drawer, desktop
    collapses the column. */
 #menu-btn {

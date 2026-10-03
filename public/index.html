@@ -19,8 +19,8 @@
     </script>
     <link rel="stylesheet" href="/vendor/xterm.css" />
     <link rel="stylesheet" href="/base.css?v=25" />
-    <link rel="stylesheet" href="/sidebar.css?v=54" />
-    <link rel="stylesheet" href="/terminal.css?v=67" />
+    <link rel="stylesheet" href="/sidebar.css?v=55" />
+    <link rel="stylesheet" href="/terminal.css?v=68" />
     <link rel="stylesheet" href="/modals.css?v=23" />
     <link rel="stylesheet" href="/chat.css?v=60" />
   </head>
@@ -43,6 +43,7 @@
         <ul id="session-list" class="sessions"></ul>
         <footer class="side-foot">
           <span id="side-foot"></span>
+          <nav id="panel-nav" class="panel-nav" aria-label="Panels" hidden></nav>
           <button id="settings-btn" class="settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.88 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.88.34H9.1A1.7 1.7 0 0 0 10.13 3V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9.1a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.37z"/></svg>
           </button>
@@ -241,6 +242,7 @@
               <button id="ghost-delete-btn" class="danger ghost" type="button" title="Remove transcripts and uploads for good">Delete…</button>
             </div>
           </section>
+          <section id="panel-mode" class="panel-mode" aria-label="Panel" hidden></section>
           <div class="mobile-composer-shell">
             <div class="attachment-tray" data-attachment-tray role="list" aria-label="Uploaded attachments" hidden></div>
             <div class="mobile-composer">
@@ -368,5 +370,5 @@
     <script src="/vendor/xterm.js"></script>
     <script src="/vendor/addon-fit.js"></script>
     <script src="/vendor/addon-web-links.js"></script>
-    <script type="module" src="/js/main.js?v=187"></script>
+    <script type="module" src="/js/main.js?v=188"></script>
 </html>
