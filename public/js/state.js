@@ -13,6 +13,7 @@ export const state = {
   // status, and views filter them by membership here, never by a status value.
   restorable: [],
   selectedGhost: null, // ghost id with its detail view open in the main pane
+  openPanel: null, // operator-configured panel id shown in the main pane
   current: null, // active session id
   sockets: new Map(), // id -> ws (one open socket per pooled entry, LRU-capped)
   selectedFolder: "",

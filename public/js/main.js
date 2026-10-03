@@ -16,6 +16,7 @@ import { markSessionSeen } from "./sidebar/rows.js";
 import { nextActivityBoundaryAt } from "./sidebar/index.js";
 import * as chat from "./chat.js";
 import * as ghost from "./ghost.js";
+import * as panels from "./panels.js";
 import { wirePalette } from "./palette.js";
 import { wireSettings, renderSettings } from "./settings.js";
 import { createVoiceController } from "./voice.js";
@@ -42,10 +43,14 @@ let refreshing = false;
 
 // Ghost detail: a dead session previewed in the main pane. Selecting a ghost
 // is mutually exclusive with a live session — the terminal and chat poll both
-function clearGhostView() {
-  if (!state.selectedGhost && !el.main.classList.contains("ghost-active")) return;
+// A panel view parks the session the same way, so one exit serves both.
+function clearPreviewView() {
+  if (!state.selectedGhost && !state.openPanel
+    && !el.main.classList.contains("ghost-active") && !el.main.classList.contains("panel-active")) return;
   state.selectedGhost = null;
+  state.openPanel = null;
   ghost.hideGhost();
+  panels.hidePanel();
   applyMode(state.mode);
   // The parked live entry survived the preview (socket + buffer intact):
   // resume its host, header and scrubber with no replay, or fall back to
@@ -55,11 +60,16 @@ function clearGhostView() {
   // TUI to show, so it comes back in Chat as openSession() would show it.
   const resumed = state.sessions.find((session) => session.id === state.current);
   if (resumed?.runner === "rpc" && state.view !== "chat") applyMode("chat");
+  // Both previews hid the toggle; shells are the only sessions without one.
+  el["mode-toggle"].hidden = resumed?.type === "shell";
   emit("sidebar:rerender");
 }
 function selectGhost(id) {
   const item = state.restorable.find((g) => g.id === id);
   if (!item) return;
+  // A ghost replaces an open panel in place; the live session stays parked.
+  state.openPanel = null;
+  panels.hidePanel();
   closeFileViewer();
   chat.resetChat();
   // Park the live session: socket + buffer survive, chrome hides, current
@@ -86,8 +96,29 @@ function selectGhost(id) {
   emit("sidebar:rerender");
 }
 
+// A panel is an operator-configured local web app shown through /panels/<id>/.
+// Same parking as a ghost preview, so returning to the session costs no replay.
+function selectPanel(id) {
+  const panel = panels.configuredPanels().find((p) => p.id === id);
+  if (!panel) return;
+  state.selectedGhost = null;
+  ghost.hideGhost();
+  closeFileViewer();
+  chat.resetChat();
+  terminal.parkCurrent();
+  activateQuickkeysSession(null);
+  state.openPanel = id;
+  chat.setComposerEnabled(false);
+  panels.showPanel(panel);
+  el["term-title"].textContent = panel.label;
+  el["term-title"].title = "";
+  el["mode-toggle"].hidden = true;
+  if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
+  emit("sidebar:rerender");
+}
+
 function openSession(session) {
-  clearGhostView();
+  clearPreviewView();
   closeFileViewer();
   markSessionSeen(session);
   terminal.attach(session);
@@ -184,7 +215,7 @@ async function checkFrontendVersion() {
 // the session is gone, so the saved id must survive until a real list arrives.
 let restorePending = true;
 function restoreSavedSession() {
-  if (state.current || state.selectedGhost) {
+  if (state.current || state.selectedGhost || state.openPanel) {
     restorePending = false;
     return;
   }
@@ -218,7 +249,7 @@ async function refresh() {
     }
     if (state.selectedGhost && !state.restorable.find((g) => g.id === state.selectedGhost)) {
       // The previewed ghost restored or was forgotten elsewhere; drop the view.
-      clearGhostView();
+      clearPreviewView();
     }
     if (state.current && !sessions.find((s) => s.id === state.current)) {
       const vanished = state.current;
@@ -252,6 +283,7 @@ async function boot() {
     state.meta = await api("/meta");
     state.selectedFolder = state.selectedFolder || state.meta.workspaceRoot;
     renderSettings();
+    panels.renderPanelNav();
     voice.setAvailable(Boolean(state.meta.transcribe));
     if (window.matchMedia("(max-width: 1099px)").matches) el.sidebar.classList.add("hidden");
     wireViewportHeight();
@@ -453,7 +485,7 @@ async function forgetGhost(id) {
     await api(`/sessions/${encodeURIComponent(id)}/ghost`, { method: "DELETE" });
     await refresh();
     showNotice("Removed from not running");
-    if (state.selectedGhost === id) clearGhostView();
+    if (state.selectedGhost === id) clearPreviewView();
   } catch (e) { showNotice("Forget failed: " + e.message, { tone: "error" }); }
 }
 
@@ -498,7 +530,7 @@ async function deleteSession(id) {
         el["mode-toggle"].hidden = false;
       }
     }
-    if (state.selectedGhost === id) clearGhostView();
+    if (state.selectedGhost === id) clearPreviewView();
     await refresh();
     showNotice(`Deleted ${name} · freed ${formatBytes(result.freed?.bytes || 0)}`);
   } catch (e) { showNotice("Delete failed: " + e.message, { tone: "error" }); }
@@ -729,6 +761,7 @@ get("session:restore", ({ ids, folder }) => restoreSessions(ids, { folder }));
 get("session:forget", (id) => forgetGhost(id));
 get("session:delete", (id) => deleteSession(id));
 get("ghost:select", (id) => selectGhost(id));
+get("panel:open", (id) => selectPanel(id));
 // Ghost detail actions live on the static skeleton in index.html; they act on
 // whichever ghost is currently selected.
 el["ghost-restore-btn"].onclick = () => {
@@ -750,8 +783,8 @@ if (el["ghost-delete-btn"]) {
   };
 }
 // Back returns to the parked live session (or empty chrome when none): the
-// same clearGhost flow as opening a session, guarded for cached old shells.
-if (el["ghost-back-btn"]) el["ghost-back-btn"].onclick = () => clearGhostView();
+// same clearPreviewView flow as opening a session, guarded for cached old shells.
+if (el["ghost-back-btn"]) el["ghost-back-btn"].onclick = () => clearPreviewView();
 // UI-only sidebar state must rerender immediately without waiting for polling.
 get("sidebar:rerender", () => {
   lastRenderedJson = sidebar.renderKey(state.sessions);
@@ -778,4 +811,5 @@ get("mode:change", (mode) => {
 get("session:openTerminal", (id) => openTerminal(id));
 get("chat:answer", (answer) => chat.answerAsk(answer));
 get("meta:refreshed", renderSettings);
+get("meta:refreshed", () => panels.renderPanelNav());
 boot();

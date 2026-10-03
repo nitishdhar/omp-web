@@ -243,6 +243,7 @@ both take precedence over the application default.
 | `OMP_WEB_TUI_IDLE_MINUTES` | `30` | Minutes an idle Terminal (TUI) session with no open terminal waits before it is handed back to the headless Chat runner. |
 | `OMP_WEB_TOKEN` | empty | Access token. When set, HTTP and WebSocket endpoints require it; `setup --token` creates the file instead. Keep it private; do not commit or share it. |
 | `OMP_WEB_ALLOW_OPEN` | empty | Set to `1` to run with no access token on a non-loopback bind. Accepts that anyone reaching the port controls the sessions; the server refuses open LAN binds without it. |
+| `OMP_WEB_PANELS` | empty | JSON array of local web apps to show inside omp-web. See [Panels](#panels). |
 | `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |
 | `OMP_WEB_TRANSCRIBE_API_KEY` | empty | Key kept on this machine and sent only to the configured transcription service. |
 | `OMP_WEB_TRANSCRIBE_MODEL` | empty | Transcription model name. |
@@ -266,6 +267,42 @@ omp-web; omp-web forwards it to the configured OpenAI-compatible
 `/audio/transcriptions` endpoint. The transcription key is not sent to the
 browser. Add those variables to the private `OMP_WEB_HOME/env` file or provide
 them through the process environment, then restart the foreground server.
+
+### Panels
+
+A panel shows a local web app inside omp-web: it gets an entry in the sidebar
+footer and opens in the main pane, served through omp-web at `/panels/<id>/`.
+List panels in `OMP_WEB_PANELS` (environment or `OMP_WEB_HOME/env`) and
+restart the server:
+
+```sh
+OMP_WEB_PANELS='[{"id":"example","label":"Example","url":"http://127.0.0.1:8090"}]'
+```
+
+`id` is 1–40 characters of `a-z`, `0-9` and `-`, unique; `label` is up to 40
+characters. An invalid entry stops startup with a message naming it.
+
+The contract a panel app can rely on:
+
+- **Loopback only.** `url` is exactly `http://127.0.0.1:<port>` or
+  `http://localhost:<port>`: no path, query, credentials, https, or other host.
+- **Relative URLs only.** The app is served under `/panels/<id>/`, so links,
+  scripts, styles and `fetch` calls must be relative (`./app.js`, `api/x`), never
+  root-absolute (`/app.js`).
+- omp-web adds `X-Forwarded-Host` (the browser's `Host`), `X-Forwarded-Proto`
+  and `X-Forwarded-Prefix` (`/panels/<id>`), passes `Origin` and custom headers
+  unchanged, and strips its own token (query parameter and header) and panel
+  cookie. It guarantees nothing else: the app does its own CSRF and origin
+  checks, for example comparing `Origin` with `X-Forwarded-Host`.
+- No WebSockets in this version.
+- **Trust boundary.** A panel is served from omp-web's origin, so its scripts
+  can reach everything omp-web's page can, including the stored access token.
+  Configure only apps you trust as much as omp-web itself.
+
+With a token configured, panel requests accept the token or a cookie derived
+from it (path-scoped to `/panels/`, `HttpOnly`, `SameSite=Strict`) that omp-web
+sets after the first token-authenticated load; `/api` and the WebSocket never
+accept that cookie.
 
 ## Reconnect, update, and remove
 

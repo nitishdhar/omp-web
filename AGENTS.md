@@ -63,8 +63,11 @@ under `public/` are served on the next request; changes to `server.js`, `api/`,
   `public/index.html`, or browsers keep the stale asset.
 - Comments explain why (invariants, tmux quirks, iOS workarounds), never what.
 - Auth is a token sent as a header or query parameter, plus a same-origin check
-  on `/api` and `/ws`. Never switch it to cookies or relax the origin check,
-  and verify the 401 path after any auth change.
+  on `/api`, `/ws` and `/panels`. API and WS are token-only: never let them
+  accept a cookie or relax the origin check. Panels alone also accept the
+  derived, path-scoped (`/panels/`), HttpOnly, SameSite=Strict `omp_web_panel`
+  cookie, issued only after a token-authenticated request. Verify the 401 path
+  after any auth change.
 - The mobile layout is a first-class surface: touch scroll, quick keys,
   safe-area insets, the full-screen drawer, and the visible `#mobile-input`
   textarea (xterm's hidden helper doesn't reliably raise the iOS keyboard).

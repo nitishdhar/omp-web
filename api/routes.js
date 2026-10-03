@@ -12,6 +12,7 @@ const { getGitStatus } = require("./git-status");
 const { transcribeVoice } = require("./transcribe");
 const { servePreviewFile } = require("./file-preview");
 const { listPreviewRoots, setPreviewRoots } = require("./preview-roots");
+const { publicPanels } = require("./panels");
 
 const INDEX_PATH = path.join(__dirname, "..", "public", "index.html");
 
@@ -57,6 +58,7 @@ async function handleApi(req, res, url) {
       profileDetails: listProfileDetails(),
       folders: listFolders(),
       transcribe: Boolean(config.transcribeBaseUrl && config.transcribeApiKey && config.transcribeModel),
+      panels: publicPanels(),
     });
   }
   if (sub[0] === "settings" && sub[1] === "preview-roots" && sub.length === 2) {

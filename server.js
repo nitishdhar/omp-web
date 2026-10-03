@@ -29,6 +29,13 @@ try {
   console.error("omp-web: workspace directory is unavailable. Run setup or set OMP_WEB_WORKSPACE to an existing directory.");
   process.exit(1);
 }
+const { configurePanels, handlePanel } = require("./api/panels");
+try {
+  configurePanels(config.panels);
+} catch (error) {
+  console.error(`omp-web: ${error.message}`);
+  process.exit(1);
+}
 const sessions = require("./sessions");
 const { handleApi } = require("./api/routes");
 const { startReaper } = require("./sessions/reaper");
@@ -131,6 +138,14 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 401, { error: "unauthorized", code: "EAUTH" });
       }
       return await handleApi(req, res, url);
+    }
+    // Panels share the API's same-origin rule; their auth (token or the
+    // derived panel cookie) is checked inside handlePanel.
+    if (url.pathname === "/panels" || url.pathname.startsWith("/panels/")) {
+      if (!originOk(req)) {
+        return sendJson(res, 403, { error: "cross-origin requests are not allowed", code: "EORIGIN" });
+      }
+      return handlePanel(req, res, url);
     }
     // Static shell (index/app.js/css/vendor/manifest/icon) is public — it holds
     // no secrets. Session data lives behind /api and /ws, which the client
