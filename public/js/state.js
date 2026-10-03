@@ -15,6 +15,11 @@ export const state = {
   selectedGhost: null, // ghost id with its detail view open in the main pane
   openPanel: null, // operator-configured panel id shown in the main pane
   settingsOpen: false, // the Settings page is shown in the main pane
+  // The Artifacts page is shown in the main pane: the gallery when
+  // openArtifact is null, otherwise that artifact's viewer.
+  artifactsOpen: false,
+  openArtifact: null, // artifact slug shown in the viewer
+  artifacts: [], // last /api/artifacts list (gallery + footer count)
   current: null, // active session id
   sockets: new Map(), // id -> ws (one open socket per pooled entry, LRU-capped)
   selectedFolder: "",

@@ -1,0 +1,118 @@
+"use strict";
+// Renders ./data.json into #app. Agents change the page by rewriting
+// data.json (write data.json.tmp, then rename it over data.json); this file
+// only holds the layout. Data text is only ever set through textContent.
+const app = document.getElementById("app");
+let stamp = null;
+let stampValue = "";
+
+function h(tag, props, ...children) {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(props || {})) {
+    if (value === undefined || value === null || value === false) continue;
+    if (key === "class") node.className = value;
+    else node.setAttribute(key, String(value));
+  }
+  for (const child of children.flat()) {
+    if (child === undefined || child === null || child === false) continue;
+    node.append(child instanceof Node ? child : document.createTextNode(String(child)));
+  }
+  return node;
+}
+
+// Only absolute http(s) and mailto links become anchors; anything else
+// (javascript:, data:, relative paths) renders as plain text.
+function link(href, label) {
+  let safe = null;
+  if (typeof href === "string") {
+    try {
+      const parsed = new URL(href.trim());
+      if (["http:", "https:", "mailto:"].includes(parsed.protocol)) safe = parsed.href;
+    } catch {
+      safe = null;
+    }
+  }
+  return safe
+    ? h("a", { href: safe, target: "_blank", rel: "noopener noreferrer" }, label)
+    : h("span", null, label);
+}
+
+function relativeTime(value) {
+  const time = Date.parse(value);
+  if (Number.isNaN(time)) return "";
+  const seconds = Math.round((Date.now() - time) / 1000);
+  if (seconds < 45) return "just now";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 36) return `${hours} h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days} d ago`;
+  return new Date(time).toLocaleDateString();
+}
+
+function updateStamp() {
+  if (!stamp) return;
+  const text = relativeTime(stampValue);
+  stamp.textContent = text ? `Updated ${text}` : "";
+  stamp.title = text ? new Date(stampValue).toLocaleString() : "";
+}
+
+function header(data) {
+  const title = typeof data.title === "string" && data.title ? data.title : "Untitled";
+  document.title = title;
+  stamp = h("p", { class: "updated" });
+  stampValue = data.updatedAt;
+  updateStamp();
+  return h("header", null, h("h1", null, title), stamp);
+}
+
+function emptyState(message) {
+  return h("p", { class: "empty" }, message);
+}
+
+function showError(error) {
+  stamp = null;
+  app.replaceChildren(
+    h("div", { class: "error", role: "alert" },
+      h("h1", null, "Could not load this page's data"),
+      h("p", null, String(error && error.message || error)),
+      h("button", { type: "button", id: "retry" }, "Try again")),
+  );
+  document.getElementById("retry").addEventListener("click", load);
+}
+
+async function load() {
+  try {
+    const response = await fetch("./data.json", { cache: "no-cache" });
+    if (!response.ok) throw new Error(`data.json answered HTTP ${response.status}`);
+    const data = await response.json();
+    if (!data || typeof data !== "object" || Array.isArray(data)) throw new Error("data.json must hold a JSON object");
+    app.replaceChildren(header(data), render(data));
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function cell(value) {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+function render(data) {
+  const columns = (Array.isArray(data.columns) ? data.columns : [])
+    .filter((column) => column && typeof column.key === "string");
+  const rows = Array.isArray(data.rows) ? data.rows.filter((row) => row && typeof row === "object") : [];
+  if (!columns.length || !rows.length) return h("main", null, emptyState("No rows yet."));
+  return h("main", null, h("div", { class: "table-wrap" }, h("table", null,
+    h("thead", null, h("tr", null, columns.map((column) => h("th", { scope: "col" }, cell(column.label ?? column.key))))),
+    h("tbody", null, rows.map((row) => h("tr", null, columns.map((column) => h("td", null, cell(row[column.key])))))))));
+}
+
+// Reload when the tab comes back, so a page left open shows the latest data.
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") load();
+});
+setInterval(updateStamp, 60_000);
+load();

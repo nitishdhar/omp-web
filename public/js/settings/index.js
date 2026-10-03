@@ -14,6 +14,7 @@ import * as panelsSection from "./panels.js";
 import * as sessionsSection from "./sessions.js";
 import * as storageSection from "./storage.js";
 import * as ompSection from "./omp.js";
+import * as skillsSection from "./skills.js";
 
 export { watchOmpUpdates } from "./omp.js";
 
@@ -24,7 +25,7 @@ const SECTIONS = {
   sessions: sessionsSection,
   storage: storageSection,
   folders: { show: () => void loadPreviewRoots() },
-  profiles: {},
+  profiles: skillsSection,
   about: {},
 };
 
@@ -52,19 +53,28 @@ function activate(name) {
   if (open) SECTIONS[name].show?.();
 }
 
-export function renderSettings() {
+// Rebuilding the profile cards drops the skill rows inside them.
+function paintReference() {
   renderReference();
+  skillsSection.paintSkillSwitches();
 }
 
-export function showSettings() {
+export function renderSettings() {
+  paintReference();
+}
+
+// `section` lets another page link straight to one section (the Artifacts
+// empty state points at Profiles).
+export function showSettings(section) {
   if (!el["settings-mode"]) return false;
   const wasOpen = open;
   open = true;
-  renderReference();
+  paintReference();
   el["settings-mode"].hidden = false;
   el.main.classList.add("settings-active");
   el["settings-btn"].setAttribute("aria-current", "page");
-  if (!wasOpen) activate(active);
+  const target = section && Object.hasOwn(SECTIONS, section) ? section : null;
+  if (target || !wasOpen) activate(target || active);
   return true;
 }
 

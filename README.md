@@ -146,6 +146,7 @@ such as `python` and `speech`. It is not an account or profile command.
 | `omp-web start` | Same as bare `omp-web`. |
 | `omp-web doctor` | Report platform, Node, tmux, OMP, workspace, and node-pty prerequisites without starting sessions or reading/changing native OMP credentials or profiles. |
 | `omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login]` | Set up only omp-web and optionally hand off to native OMP. |
+| `omp-web artifact <new\|list\|path\|url\|check\|touch>` | Create and maintain [artifacts](#artifacts); `omp-web artifact --help` lists the options. |
 | `omp-web --help` | Show command help. |
 | `npm start` | Start the server directly from a source checkout. |
 | `npm run doctor` / `npm run setup` | Source-checkout equivalents of the CLI commands. |
@@ -237,6 +238,8 @@ both take precedence over the application default.
 | `OMP_WEB_PROFILES_DIR` | `<OMP_WEB_OMP_HOME>/profiles` | Native OMP profile directory used by the profile picker. |
 | `OMP_WEB_SESSIONS_DIR` | `<OMP_WEB_OMP_HOME>/web-sessions` | Per-session OMP transcript directory. |
 | `OMP_WEB_ATTACHMENTS_DIR` | `<OMP_WEB_HOME>/attachments` | Private, per-session uploaded-attachment directory. |
+| `OMP_WEB_ARTIFACTS_DIR` | `<OMP_WEB_HOME>/artifacts` | Folder holding one subfolder per [artifact](#artifacts). |
+| `OMP_WEB_PUBLIC_URL` | empty | This console's public origin (e.g. `https://console.example`). `omp-web artifact url` prints links under it; without it links use `http://127.0.0.1:<port>`. |
 | `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux socket label. |
 | `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Minutes a Chat session's headless `omp` stays up after it settles before it exits. The next message starts it again. Also settable in Settings → Sessions & memory (1–1440); when this variable is set it wins and Settings shows it locked. |
@@ -317,6 +320,54 @@ With a token configured, panel requests accept the token or a cookie derived
 from it (path-scoped to `/panels/`, `HttpOnly`, `SameSite=Strict`) that omp-web
 sets after the first token-authenticated load; `/api` and the WebSocket never
 accept that cookie.
+
+### Artifacts
+
+An artifact is a small static web page an agent builds and keeps updated: a
+to-do list, a tracker, a report. omp-web serves it at a private link that
+works from a phone or a chat message, and lists every artifact in the sidebar's
+**Artifacts** gallery.
+
+Each artifact is a folder `<OMP_WEB_HOME>/artifacts/<slug>/` (or under
+`OMP_WEB_ARTIFACTS_DIR`) holding an `artifact.json` manifest (`title`, optional
+`description`, `project` folder, `entry` page and `updatedAt`), the page files,
+and usually a `data.json` the page renders. Agents update the data; the page
+stays the same.
+
+```sh
+omp-web artifact new todo --title "To-do" --template list   # list, table, cards or blank
+omp-web artifact list [--json]
+omp-web artifact path todo     # the folder
+omp-web artifact url todo      # the link (uses OMP_WEB_PUBLIC_URL when set)
+omp-web artifact check todo    # manifest, entry, file types, size, JSON, external URLs, symlinks
+omp-web artifact touch todo    # bump updatedAt after changing files
+```
+
+Served files follow fixed rules: no dotfiles, symlinks must stay inside the
+folder, only html, css, js, json, txt, md, svg, image and woff2 files, and no
+directory listings. `check` also flags folders over 20 MB.
+
+**The skill.** omp-web ships an `artifacts` skill that teaches agents this
+workflow (update instead of duplicating, write `data.json` atomically, run
+`check`, reply with the link). On every start omp-web copies its bundled skills
+to `<OMP_WEB_HOME>/skills/`, a path that survives package upgrades. Switch the
+skill on per profile in **Settings → Profiles**, which adds that folder to the
+profile's `skills.customDirectories` through `omp config set` (other entries
+are kept). By hand, `omp [--profile=<name>] config set skills.customDirectories
+'[...existing entries, "<OMP_WEB_HOME>/skills"]'` does the same; the value
+replaces the whole list.
+
+**Trust model.** A link `/a/<capability>/<slug>/` is a bearer capability:
+anyone holding it can read every file of that artifact, with no token and no
+login, so never put secrets in an artifact. Capabilities are signed with
+`<OMP_WEB_HOME>/artifacts.key` (created on first use, mode 0600), independent
+of the access token. Deleting that file revokes every link at once; new links
+are issued on next use. Pages run sandboxed (`Content-Security-Policy:
+sandbox` without `allow-same-origin`), so even though they are served from
+omp-web's address they get an opaque origin: they cannot read omp-web's stored
+token, cookies or localStorage, cannot call `/api`, and cannot load anything
+outside their own folder. They also cannot save state; `data.json` is the
+source of truth.
 
 ## Reconnect, update, and remove
 

@@ -1,0 +1,68 @@
+:root {
+  color-scheme: light dark;
+  --bg: #f7f7f5;
+  --surface: #ffffff;
+  --text: #1d1d1f;
+  --muted: #6b6b70;
+  --line: #e2e2e0;
+  --accent: #2f6fdf;
+  --danger: #c2372b;
+  --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161618;
+    --surface: #1f1f22;
+    --text: #ececef;
+    --muted: #9a9aa2;
+    --line: #333338;
+    --accent: #7aa7ff;
+    --danger: #ff7b6e;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  overflow-wrap: anywhere;
+}
+#app { max-width: 720px; margin: 0 auto; padding: 24px 16px 48px; }
+header { margin-bottom: 20px; }
+h1 { font-size: 1.6rem; line-height: 1.25; margin: 0; }
+h2 { font-size: 1.05rem; margin: 0 0 8px; }
+p { margin: 0; }
+a { color: var(--accent); }
+.updated, .meta, .detail, .empty { color: var(--muted); }
+.updated { font-size: 0.875rem; margin-top: 4px; }
+.empty { padding: 32px 0; text-align: center; }
+.error { padding: 32px 0; }
+.error p { color: var(--muted); margin: 8px 0 16px; }
+button {
+  font: inherit;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+}
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+section { margin-bottom: 24px; }
+ul { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.item { display: flex; gap: 12px; padding: 12px 14px; border-top: 1px solid var(--line); }
+.item:first-child { border-top: 0; }
+.mark {
+  flex: none; width: 20px; height: 20px; margin-top: 2px;
+  border: 1.5px solid var(--muted); border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; line-height: 1;
+}
+.done .mark { background: var(--muted); border-color: var(--muted); color: var(--surface); }
+.done .text { color: var(--muted); text-decoration: line-through; }
+.body { min-width: 0; flex: 1; }
+.detail { font-size: 0.9rem; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; font-size: 0.8rem; margin-top: 4px; }
+.overdue { color: var(--danger); font-weight: 600; }
+.tag { border: 1px solid var(--line); border-radius: 999px; padding: 0 8px; }

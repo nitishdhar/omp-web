@@ -22,7 +22,8 @@
     <link rel="stylesheet" href="/sidebar.css?v=56" />
     <link rel="stylesheet" href="/terminal.css?v=68" />
     <link rel="stylesheet" href="/modals.css?v=24" />
-    <link rel="stylesheet" href="/settings.css?v=1" />
+    <link rel="stylesheet" href="/settings.css?v=2" />
+    <link rel="stylesheet" href="/artifacts.css?v=1" />
     <link rel="stylesheet" href="/chat.css?v=60" />
   </head>
   <body>
@@ -45,6 +46,11 @@
         <footer class="side-foot">
           <span id="side-foot"></span>
           <nav id="panel-nav" class="panel-nav" aria-label="Panels" hidden></nav>
+          <button id="artifacts-btn" class="panel-link artifacts-link" type="button" title="Artifacts">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.6"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.6"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.6"/></svg>
+            <span class="panel-link-label">Artifacts</span>
+            <span id="artifacts-count" class="artifacts-count" hidden></span>
+          </button>
           <button id="settings-btn" class="settings-btn" type="button" title="Settings" aria-label="Settings">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3.2"/><path d="M19.4 14.5a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.1A1.7 1.7 0 0 0 8.9 19.3a1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.88 1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.1A1.7 1.7 0 0 0 4.7 8.9a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.88.34H9.1A1.7 1.7 0 0 0 10.13 3V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9.1a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1.37z"/></svg>
           </button>
@@ -198,6 +204,43 @@
             </div>
           </section>
           <section id="panel-mode" class="panel-mode" aria-label="Panel" hidden></section>
+          <section id="artifacts-mode" class="artifacts-mode" aria-label="Artifacts" hidden>
+            <div id="artifacts-gallery" class="art-gallery">
+              <header class="art-head">
+                <h1>Artifacts</h1>
+                <p id="artifacts-status" class="art-status" role="status"></p>
+              </header>
+              <div id="artifacts-filters" class="art-filters" role="group" aria-label="Filter by project" hidden></div>
+              <ul id="artifacts-list" class="art-grid" aria-label="Artifacts"></ul>
+              <div id="artifacts-empty" class="art-empty" hidden>
+                <h2>No artifacts yet</h2>
+                <p>Artifacts are small pages your agents build and keep current: a tracker, a dashboard, a report.</p>
+                <p class="art-empty-prompt">Ask any session: “make me a page that…”</p>
+                <p>Sessions need the Artifacts skill. Switch it on per profile in <button id="artifacts-empty-settings" class="art-inline-link" type="button">Settings → Profiles</button>.</p>
+              </div>
+            </div>
+            <div id="artifact-viewer" class="art-viewer" hidden>
+              <header class="art-viewer-head">
+                <button id="artifact-back" class="ghost art-action" type="button" title="Back to gallery" aria-label="Back to gallery">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+                </button>
+                <h2 id="artifact-title" class="art-viewer-title"></h2>
+                <button id="artifact-reload" class="ghost art-action" type="button" title="Reload" aria-label="Reload">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+                  <span class="art-action-label">Reload</span>
+                </button>
+                <a id="artifact-open" class="ghost art-action" href="about:blank" target="_blank" rel="noopener noreferrer" title="Open in new tab" aria-label="Open in new tab">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/></svg>
+                  <span class="art-action-label">Open</span>
+                </a>
+                <button id="artifact-copy" class="ghost art-action" type="button" title="Copy link" aria-label="Copy link">
+                  <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>
+                  <span class="art-action-label">Copy link</span>
+                </button>
+              </header>
+              <div id="artifact-frames" class="art-frames"></div>
+            </div>
+          </section>
           <section id="settings-mode" class="settings-mode" aria-label="Settings" hidden>
             <nav id="settings-nav" class="set-nav" aria-label="Settings sections">
               <button type="button" class="set-nav-item" data-section="general">General</button>
@@ -327,7 +370,7 @@
               <section class="set-section" data-section="profiles" aria-label="Profiles" hidden>
                 <h2>Profiles</h2>
                 <div id="settings-profiles" class="set-profiles"></div>
-                <p class="set-note">Read-only. Profiles live in <code>~/.omp/profiles/&lt;name&gt;/agent/config.yml</code> and native OMP owns them — edit with <code>omp</code>.</p>
+                <p class="set-note">Model roles are read-only. Profiles live in <code>~/.omp/profiles/&lt;name&gt;/agent/config.yml</code> and native OMP owns them — edit with <code>omp</code>.</p>
               </section>
               <section class="set-section" data-section="about" aria-label="About" hidden>
                 <h2>About</h2>
@@ -462,5 +505,5 @@
     <script src="/vendor/xterm.js"></script>
     <script src="/vendor/addon-fit.js"></script>
     <script src="/vendor/addon-web-links.js"></script>
-    <script type="module" src="/js/main.js?v=190"></script>
+    <script type="module" src="/js/main.js?v=191"></script>
 </html>

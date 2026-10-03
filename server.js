@@ -41,6 +41,8 @@ const sessions = require("./sessions");
 const { handleApi } = require("./api/routes");
 const { startReaper } = require("./sessions/reaper");
 const { sendJson, sendError, listProfiles } = require("./api/util");
+const { handleArtifact } = require("./api/artifact-serve");
+const { syncBundledSkills } = require("./api/skills");
 
 const PUBLIC = path.join(__dirname, "public");
 const PUBLIC_REAL = fs.realpathSync(PUBLIC);
@@ -131,6 +133,12 @@ async function serveStatic(req, res, url) {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, "http://localhost");
+    // Artifact links carry their own capability and are opened from sandboxed
+    // pages (Origin: null) and other devices, so neither the token nor the
+    // same-origin check applies; see api/artifact-serve.js.
+    if (url.pathname === "/a" || url.pathname.startsWith("/a/")) {
+      return await handleArtifact(req, res, url);
+    }
     if (url.pathname.startsWith("/api/")) {
       if (!originOk(req)) {
         return sendJson(res, 403, { error: "cross-origin requests are not allowed", code: "EORIGIN" });
@@ -392,4 +400,5 @@ server.listen(config.port, config.host, () => {
   if (config.token) console.log("auth: token required");
   else console.log(`auth: OPEN — no access token${LOOPBACK_HOSTS.has(config.host) ? " (loopback only)" : " (network, OMP_WEB_ALLOW_OPEN=1)"}`);
   startReaper();
+  syncBundledSkills();
 });

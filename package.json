@@ -31,9 +31,11 @@
   "private": true,
   "files": [
     "api/",
+    "artifact-templates/",
     "bin/",
     "extensions/",
     "public/",
+    "skills/",
     "sessions/",
     "server.js",
     "config.js",

@@ -19,6 +19,7 @@ function usage() {
        omp-web doctor
        omp-web recover --list
        omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login] [--token]
+       omp-web artifact <new|list|path|url|check|touch> ...
 
 Commands:
   start       Run omp-web in the foreground (the default command).
@@ -26,6 +27,7 @@ Commands:
   recover     List transcript-backed session candidates after tmux-server loss.
               Never recreates sessions; explicit review only.
   setup       Configure a workspace, and with --token create a private access token.
+  artifact    Create, list, link and check artifacts (run \`omp-web artifact --help\`).
 
 Setup options:
   --workspace PATH    Existing folder root shown by the project picker.
@@ -631,6 +633,7 @@ async function main() {
     if (args.length === 1 && args[0] === "--list") return recoverList();
     return fail("usage: omp-web recover --list");
   }
+  if (command === "artifact") return require("./artifact-cli").runArtifact(args);
   if (command === "setup") {
     if (args[0] === "-h" || args[0] === "--help") return usage();
     return setup(args);

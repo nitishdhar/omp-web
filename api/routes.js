@@ -17,6 +17,7 @@ const { invalidateStorage } = require("./storage-stats");
 const { sleepIdleNow } = require("../sessions/reaper");
 const { startUpdate, startReload, currentJob } = require("./omp-update");
 const { getVersion } = require("./omp-version");
+const { listArtifacts } = require("./artifact-store");
 
 const INDEX_PATH = path.join(__dirname, "..", "public", "index.html");
 
@@ -66,6 +67,13 @@ async function handleApi(req, res, url) {
     });
   }
   if ((sub[0] === "settings" || sub[0] === "stats") && (await handleSettings(req, res, sub, url))) return;
+  if (req.method === "GET" && sub[0] === "artifacts" && sub.length === 1) {
+    try {
+      return sendJson(res, 200, { artifacts: listArtifacts() });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
   if (sub[0] === "omp" && sub.length === 2) {
     try {
       if (req.method === "GET" && sub[1] === "version") {
