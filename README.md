@@ -12,8 +12,15 @@ installation listens at `http://127.0.0.1:7799`.
 ## Requirements
 
 - macOS or Linux, and Node.js **22 or newer**
-- `tmux`
+- `tmux` **3.2 or newer**
 - OMP (`omp`) on your shell `PATH`
+- A C++ build toolchain for `node-pty`, the terminal module. It ships prebuilt
+  binaries for macOS only, so on Linux `npm` always compiles it: install
+  `build-essential` and `python3` on Debian/Ubuntu
+  (`sudo apt install build-essential python3`), or the distro equivalent
+  (`sudo dnf install gcc-c++ make python3` on Fedora/RHEL). On macOS the
+  prebuilt binary normally loads; if it does not, install the Xcode Command
+  Line Tools (`xcode-select --install`).
 
 Install Node with your preferred toolchain and confirm it is Node 22+:
 
@@ -35,6 +42,10 @@ sudo apt install tmux
 sudo dnf install tmux
 ```
 
+Check the version afterwards: older LTS releases (Ubuntu 20.04, Debian 11, RHEL/Rocky 8)
+package a tmux older than 3.2, which omp-web cannot use; install a newer tmux
+from backports, a newer release, or source.
+
 If OMP is not installed yet, use one of the methods in the
 [official OMP installation instructions](https://github.com/can1357/oh-my-pi#install).
 For example, the official macOS/Linux installer is:
@@ -43,7 +54,9 @@ For example, the official macOS/Linux installer is:
 curl -fsSL https://omp.sh/install | sh
 ```
 
-Confirm the prerequisites before continuing:
+Confirm the prerequisites before continuing (`omp-web doctor` checks them all
+again later, including the tmux version and every OMP flag omp-web launches
+with):
 
 ```sh
 tmux -V
@@ -52,11 +65,11 @@ omp --version
 
 ## Install from source
 
-`omp-web` is private and is **not published to an npm registry**. Clone the
-source, install its locked dependencies, then use the guided setup:
+`omp-web` is **not published to an npm registry**. Clone the source, install
+its locked dependencies, then use the guided setup:
 
 ```sh
-git clone https://github.com/<owner>/omp-web.git
+git clone https://github.com/nitishdhar/omp-web.git
 cd omp-web
 npm ci
 npm run doctor
@@ -145,49 +158,79 @@ such as `python` and `speech`. It is not an account or profile command.
 | --- | --- |
 | `omp-web` | Start the localhost server in the foreground. |
 | `omp-web start` | Same as bare `omp-web`. |
-| `omp-web doctor` | Report platform, Node, tmux, OMP, workspace, and node-pty prerequisites without starting sessions or reading/changing native OMP credentials or profiles. |
-| `omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login]` | Set up only omp-web and optionally hand off to native OMP. |
+| `omp-web doctor` | Report platform, Node, tmux (3.2+), OMP (and every flag omp-web launches it with), workspace, and node-pty prerequisites without starting sessions or reading/changing native OMP credentials or profiles. Exits non-zero on any `FAIL`. |
+| `omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login] [--token]` | Set up only omp-web and optionally hand off to native OMP. |
 | `omp-web artifact <new\|list\|path\|url\|check\|touch>` | Create and maintain [artifacts](#artifacts); `omp-web artifact --help` lists the options. |
 | `omp-web addresses [--json]` | List the addresses this console answers on, whether each is reachable with the current bind, and which one links use. Works while the server is down. See [Addresses](#addresses). |
 | `omp-web credential <list\|set\|import\|rm>` | Manage [credentials](#credentials) without the browser; values are read from stdin or imported once, never shown. Works while the server is down. |
+| `omp-web service <install\|uninstall\|status> [--label L] [--dry-run]` | [Run as a service](#run-as-a-service): a LaunchAgent on macOS, a systemd user unit on Linux. |
 | `omp-web --help` | Show command help. |
 | `npm start` | Start the server directly from a source checkout. |
 | `npm run doctor` / `npm run setup` | Source-checkout equivalents of the CLI commands. |
 
-The server remains attached to the foreground terminal. It does not create,
-load, modify, or remove a launchd job on macOS, nor a systemd unit on Linux.
-A minimal Linux user-unit equivalent, managed entirely by you. Use
-`command -v npm` for the `ExecStart` path (nvm/fnm shims are not on systemd's
-`PATH`) and your checkout for `WorkingDirectory`:
+`omp-web` and `npm start` keep the server attached to the foreground terminal.
+To keep it running in the background, install it as a service.
 
-```ini
-# ~/.config/systemd/user/omp-web.service
-[Unit]
-Description=omp-web localhost console
+## Run as a service
 
-[Service]
-WorkingDirectory=/path/to/omp-web
-ExecStart=/path/to/npm start
-# The tmux server shares this unit's cgroup: the default control-group mode
-# would take live sessions down on every stop, restart, or crash-restart.
-KillMode=process
-Restart=on-failure
+`omp-web service install` registers the server with your user's service
+manager and starts it:
 
-[Install]
-WantedBy=default.target
+| | macOS | Linux |
+| --- | --- | --- |
+| File | `~/Library/LaunchAgents/com.omp-web.server.plist` | `~/.config/systemd/user/omp-web.service` |
+| Starts | now, and at every login (`RunAtLoad`, restarted if it exits) | now, and with your user manager (`Restart=on-failure`) |
+| Log | `~/Library/Logs/omp-web.log` | `journalctl --user -u omp-web` |
+
+Run it from the shell you normally start omp-web in. The service gets a thin
+environment, so install records what it needs from that shell: the absolute
+`node` and `omp-web` paths, a `PATH` that finds `node`, `tmux` and `omp` the
+way the shell does now, and `OMP_WEB_HOST`, `OMP_WEB_PORT`, `OMP_WEB_HOME` and
+`OMP_WEB_TMUX_SOCKET` if they are set. Put every other setting in
+`OMP_WEB_HOME/env`, which the server reads at start. The access token is never
+written into the service file: create it with `omp-web setup --token`. Install
+refuses a non-loopback bind without a token, the same rule the server applies.
+
+```sh
+omp-web service install --dry-run   # print the file and commands, change nothing
+omp-web service install             # write, load, start, and check it answers
+omp-web service status              # service state, pid, last exit, HTTP check
+omp-web service uninstall           # stop it and remove the file
 ```
 
-Enable it with `systemctl --user enable --now omp-web`.
+`--label L` manages a second, independent service (for example on another
+port); commands only ever touch the label they are given.
+
+On macOS the LaunchAgent belongs to your login session, so it starts when you
+log in, also after a reboot, and can read the login keychain. A Mac that
+should serve without anyone logging in needs automatic login.
+
+On Linux a user service stops when you log out and waits for your next login
+after a reboot. Run `loginctl enable-linger $USER` once to keep it running;
+install prints this reminder until lingering is on.
+
+Sessions survive the service. tmux, not the server, is the source of truth:
+stopping, restarting, updating or uninstalling the service leaves every tmux
+session running, and the restarted server picks them up.
+
+To update, install the new package (see
+[Reconnect, update, and remove](#reconnect-update-and-remove)), then run
+`omp-web service install` again. Rerunning install is also how to apply a
+changed shell `PATH`, a new Node version or a new bind. When nothing else
+changed, a restart is enough: `launchctl kickstart -k gui/$(id -u)/com.omp-web.server`
+on macOS, `systemctl --user restart omp-web` on Linux.
 
 ## Install from a release
 
 Download the tarball attached to the
-[latest release](https://github.com/nitishdhar/omp-web/releases/latest),
-then install it globally:
+[latest release](https://github.com/nitishdhar/omp-web/releases/latest)
+(see the [changelog](CHANGELOG.md) for what changed), then install it
+globally:
 
 ```sh
-curl -fsSLO https://github.com/nitishdhar/omp-web/releases/download/v0.3.0/omp-web-0.3.0.tgz
-npm install --global ./omp-web-0.3.0.tgz
+VERSION=0.10.0   # the release you are installing
+curl -fsSLO "https://github.com/nitishdhar/omp-web/releases/download/v$VERSION/omp-web-$VERSION.tgz"
+npm install --global "./omp-web-$VERSION.tgz"
 omp-web doctor
 omp-web setup
 omp-web
@@ -198,25 +241,26 @@ relying on the OS user boundary. Pass `omp-web setup --token` (or set
 `OMP_WEB_TOKEN`) to require a token instead — mandatory if the server will
 ever bind a non-loopback address.
 
-Use the version attached to the release you are installing if it differs.
+Global installs need the same [requirements](#requirements), including the
+build toolchain on Linux: npm compiles `node-pty` during the install.
 Registry-style commands such as `npm install -g omp-web` are intentionally
-unsupported: releases are the only distribution.
+unsupported: release tarballs and source checkouts are the only distribution.
 
 ## Local tarball installation
 
-`npm pack` makes a shareable local installer; it is the path for a recipient
-who does not have access to the source repository. On a machine with the
-checked-out project:
+`npm pack` makes a local installer from a checkout, for a machine that should
+run your own build rather than a release. On a machine with the checked-out
+project:
 
 ```sh
 npm pack
 ```
 
-Transfer the resulting `omp-web-0.3.0.tgz` by a method appropriate for the
+Transfer the resulting `omp-web-<version>.tgz` by a method appropriate for the
 recipient, then on that recipient's machine:
 
 ```sh
-npm install --global /path/to/omp-web-0.3.0.tgz
+npm install --global /path/to/omp-web-<version>.tgz
 omp-web doctor
 omp-web setup
 omp-web
@@ -241,7 +285,10 @@ restart. Only a missing link, a dangling link, or a link omp-web made earlier
 is ever replaced: a real file or directory at either path, or a
 `~/.local/bin/omp-web` that links to some other program, is left alone and
 reported. `omp-web doctor` shows both links and warns when `~/.local/bin` is
-not on `PATH`.
+not on `PATH`; `omp-web setup` then prints the exact line to add for your
+shell (`~/.zprofile` for zsh, `~/.bashrc` and `~/.profile` for bash,
+`fish_add_path` for fish). Agents work either way: the artifacts skill falls
+back to `node <install folder>/bin/omp-web.js`.
 
 To manage neither link, set `OMP_WEB_NO_INSTALL_LINKS=1` in the environment
 or in `OMP_WEB_HOME/env` before installing or starting. Removing omp-web
@@ -262,13 +309,13 @@ both take precedence over the application default.
 | `OMP_WEB_PORT` | `7799` | Listen port. |
 | `OMP_WEB_WORKSPACE` | `~/workspace` | Root exposed to the folder picker. |
 | `OMP_WEB_EXTRA_ROOTS` | empty | Colon-separated extra folder trees to list beside the workspace, e.g. `~/private`. |
-| `OMP_WEB_OMP_BIN` | `omp` | OMP executable, resolved through a login shell. |
+| `OMP_WEB_OMP_BIN` | `omp` | OMP executable: a name looked up on the server's `PATH`, or an absolute path (for example a wrapper script). |
 | `OMP_WEB_PROFILES_DIR` | `<OMP_WEB_OMP_HOME>/profiles` | Native OMP profile directory used by the profile picker. |
 | `OMP_WEB_SESSIONS_DIR` | `<OMP_WEB_OMP_HOME>/web-sessions` | Per-session OMP transcript directory. |
 | `OMP_WEB_ATTACHMENTS_DIR` | `<OMP_WEB_HOME>/attachments` | Private, per-session uploaded-attachment directory. |
 | `OMP_WEB_ARTIFACTS_DIR` | `<OMP_WEB_HOME>/artifacts` | Folder holding one subfolder per [artifact](#artifacts). |
 | `OMP_WEB_NO_INSTALL_LINKS` | empty | Set to `1` to stop install, start and setup from creating or repairing `~/.agents/skills/omp-web-artifacts` and `~/.local/bin/omp-web`. See [What installing changes](#what-installing-changes-on-this-machine). |
-| `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
+| `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable (3.2 or newer). The fixed locations win over `PATH`, so point this at a newer tmux installed anywhere else. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux socket label. |
 | `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Minutes a Chat session's headless `omp` stays up after it settles before it exits. The next message starts it again. Also settable in Settings → Sessions & memory (1–1440); when this variable is set it wins and Settings shows it locked. |
 | `OMP_WEB_TUI_IDLE_MINUTES` | `30` | Minutes an idle Terminal (TUI) session with no open terminal waits before it is handed back to the headless Chat runner. Also settable in Settings → Sessions & memory (5–1440); when this variable is set it wins and Settings shows it locked. |
@@ -311,9 +358,10 @@ Each credential lives in one store:
 | File (default) | `OMP_WEB_HOME/credentials.json`, mode 0600, written atomically. Names and metadata live in `settings.json`; values never do. |
 | Keychain (macOS) | The login keychain, service `omp-web`, account = credential name. Values up to about 3,900 characters. |
 
-The Keychain answers only a server running in your login session (started
-from a terminal). A server started by a background service such as a
-LaunchAgent is refused it ("User interaction is not allowed"); omp-web probes
+The Keychain answers only a server running in your login session: one started
+from a terminal, or by `omp-web service install` (a LaunchAgent in your login
+session). A server started outside it, such as a Background-session
+LaunchAgent, is refused it ("User interaction is not allowed"); omp-web probes
 this once per start, and Settings shows Keychain as unavailable with the
 reason instead of failing later. Changing a credential's store moves the
 value; a credential still used by Voice or passed to OMP cannot be deleted.
@@ -360,7 +408,7 @@ A session resolves the keys inside its pane: the pane command carries only the
 variable names, and a small resolver passes the values to the pane shell over
 a pipe, so they never appear in process arguments, tmux options or commands,
 shell history, logs, or any file besides the credential store. A credential
-that cannot be read (missing, or Keychain from a background service) leaves
+that cannot be read (missing, or Keychain from outside the login session) leaves
 that variable unset; the session still starts and its pane shows one line
 naming the variable. Changes apply to the next omp launch. Like any
 environment variable, the values are visible to processes of the same user
@@ -490,7 +538,8 @@ disconnects or you stop and restart the foreground server, reconnect at the
 same localhost URL and reopen the session; the tmux session remains until you
 explicitly end it.
 
-To update a source checkout:
+Read the [changelog](CHANGELOG.md) for what changed between versions. To
+update a source checkout:
 
 ```sh
 git pull
@@ -508,13 +557,16 @@ omp-web doctor
 
 Installing over the previous version keeps `OMP_WEB_HOME`, the saved access
 token, tmux sessions, and OMP data; only the program is replaced. Restart the
-running `omp-web` afterwards so the new server code is live, then hard-reload
-the browser tab.
+running `omp-web` afterwards so the new server code is live (installed as a
+service: rerun `omp-web service install`, see
+[Run as a service](#run-as-a-service)), then hard-reload the browser tab.
 
 Removing the source checkout or running `npm uninstall --global omp-web`
 removes the program only. It does not remove tmux sessions, OMP data,
 `OMP_WEB_HOME`, or the two install links. Delete those separately only if you
-explicitly want to discard them.
+explicitly want to discard them. If you installed the service, run
+`omp-web service uninstall` before removing the program; otherwise the service
+file stays behind, pointing at a program that is gone.
 
 ## Security boundary
 

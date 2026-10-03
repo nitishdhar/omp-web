@@ -13,7 +13,24 @@ const { ensureInstallLinks, inspectInstallLinks, formatResult } = require("../ap
 const { newestOwnedJsonl, readTranscriptTitle } = require("../transcripts");
 
 const MINIMUM_NODE_MAJOR = 22;
-const REQUIRED_OMP_FLAGS = ["--extension", "--profile", "--session-dir", "--model"];
+// Every flag sessions.js launches omp with (ompLaunchArgs and paneCommandFor:
+// both runners, `-r` is `--resume`, Chat adds `--mode rpc-ui --no-ui`). An omp
+// too old for one of them starts, misparses the argv and drops the pane to a
+// shell, so doctor fails on any that `omp --help` does not list. `--fork` is
+// launched too but omp does not document it in --help, so it cannot be probed.
+const REQUIRED_OMP_FLAGS = [
+  "--extension", "--profile", "--session-dir", "--model", "--resume",
+  "--mode", "--no-ui", "--no-title",
+];
+// sessions.js bootstrap() sets `terminal-features`, which tmux added in 3.2;
+// older servers reject it and terminal sync/colour negotiation breaks.
+const MINIMUM_TMUX = { major: 3, minor: 2 };
+// One sentence shared in spirit with bin/postinstall.js: node-pty ships
+// prebuilt binaries for macOS only, so Linux always compiles it with node-gyp.
+const NATIVE_BUILD_HINT = "node-pty needs a C++ toolchain when no prebuilt binary fits "
+  + "(Linux: build-essential and python3, or your distro's equivalent; macOS: Xcode "
+  + "Command Line Tools via `xcode-select --install`); install them, then rerun "
+  + "`npm ci` in a checkout or reinstall the omp-web tarball";
 
 function usage() {
   console.log(`Usage: omp-web [start]
@@ -23,6 +40,7 @@ function usage() {
        omp-web artifact <new|list|path|url|check|touch> ...
        omp-web addresses [--json]
        omp-web credential <list|set|import|rm> ...
+       omp-web service <install|uninstall|status> [--label L] [--dry-run]
 
 Commands:
   start       Run omp-web in the foreground (the default command).
@@ -34,6 +52,8 @@ Commands:
   addresses   List the addresses this console answers on; * marks the one links use.
   credential  Manage stored credentials; values are never shown
               (run \`omp-web credential --help\`).
+  service     Run omp-web as a per-user service: a LaunchAgent on macOS, a
+              systemd user unit on Linux. --dry-run prints the file and commands.
 
 Setup options:
   --workspace PATH    Existing folder root shown by the project picker.
@@ -109,6 +129,47 @@ function directoryExists(candidate) {
 function check(ok, label, detail = "") {
   console.log(`${ok ? "ok" : "FAIL"} ${label}${detail ? ` — ${detail}` : ""}`);
   return ok;
+}
+
+// Matches a whole flag token in help text: a bare substring test would let
+// `--model` satisfy `--mode`.
+function helpListsFlag(text, flag) {
+  return new RegExp(`(^|[\\s,])${flag}(?=[\\s=,[]|$)`, "m").test(text);
+}
+
+// `tmux -V` prints "tmux 3.7c", "tmux next-3.6" (a development build toward
+// 3.6) or a non-numeric tag such as "tmux master"; letter suffixes are patch
+// releases and never change the feature level, so only major.minor counts.
+function parseTmuxVersion(text) {
+  const match = /^tmux\s+(?:next-)?(\d+)\.(\d+)/.exec(String(text).trim());
+  return match ? { major: Number(match[1]), minor: Number(match[2]) } : null;
+}
+
+function checkTmuxVersion(tmux) {
+  const result = childProcess.spawnSync(tmux, ["-V"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "pipe"],
+    timeout: 5000,
+  });
+  const wanted = `${MINIMUM_TMUX.major}.${MINIMUM_TMUX.minor}`;
+  const text = String(result.stdout || "").trim();
+  if (result.error || result.status !== 0 || !text) {
+    return check(false, `tmux >= ${wanted}`, `\`${tmux} -V\` failed`);
+  }
+  const version = parseTmuxVersion(text);
+  if (!version) {
+    // An unnumbered build is usually built from source and new; refusing it
+    // would block exactly the users most likely to have a recent tmux.
+    console.log(`WARN tmux >= ${wanted} — could not parse "${text}"; omp-web needs ${wanted} or newer`);
+    return true;
+  }
+  const ok = version.major > MINIMUM_TMUX.major
+    || (version.major === MINIMUM_TMUX.major && version.minor >= MINIMUM_TMUX.minor);
+  // config.tmuxBin prefers fixed system paths over PATH, so a newer tmux
+  // installed elsewhere is only used once OMP_WEB_TMUX_BIN names it.
+  return check(ok, `tmux >= ${wanted}`, ok ? `${text} (${tmux})`
+    : `${text} at ${tmux} is too old; install tmux ${wanted}+ and, if it lives outside `
+      + "/opt/homebrew/bin, /usr/local/bin and /usr/bin, set OMP_WEB_TMUX_BIN to it");
 }
 
 const PROFILE_CATALOG_TIMEOUT_MS = 20000;
@@ -362,6 +423,7 @@ function doctor() {
 
   const tmux = executablePath(config.tmuxBin);
   healthy = check(Boolean(tmux), "tmux executable", config.tmuxBin) && healthy;
+  if (tmux) healthy = checkTmuxVersion(tmux) && healthy;
   const omp = executablePath(config.ompBin);
   healthy = check(Boolean(omp), "omp executable", config.ompBin) && healthy;
 
@@ -370,7 +432,9 @@ function doctor() {
     healthy = check(help.ok, "omp --help", help.ok ? "bounded help completed" : "could not run safely") && healthy;
     if (help.ok) {
       for (const flag of REQUIRED_OMP_FLAGS) {
-        healthy = check(help.text.includes(flag), `omp supports ${flag}`) && healthy;
+        const listed = helpListsFlag(help.text, flag);
+        healthy = check(listed, `omp supports ${flag}`,
+          listed ? "" : "not in `omp --help`; update omp (`omp update`)") && healthy;
       }
     }
     const setupHelp = boundedHelp(omp, ["setup", "--help"]);
@@ -390,7 +454,8 @@ function doctor() {
     const pty = require("node-pty");
     healthy = check(typeof pty.spawn === "function", "node-pty native module") && healthy;
   } catch (error) {
-    healthy = check(false, "node-pty native module", error.code || error.message) && healthy;
+    const reason = error.code || String(error.message).split("\n")[0];
+    healthy = check(false, "node-pty native module", `${reason}. ${NATIVE_BUILD_HINT}`) && healthy;
   }
 
   // Warn-only: a missing link costs agents the PATH shortcut or the skill,
@@ -584,6 +649,37 @@ function nativeOmpHandoff(profile, workspace) {
   if (result.status && result.status !== 0) process.exitCode = result.status;
 }
 
+const PATH_EXPORT_LINE = 'export PATH="$HOME/.local/bin:$PATH"';
+
+// The command link only helps once ~/.local/bin is on PATH, and a fresh
+// macOS or minimal Linux account often lacks it. Printing the exact line for
+// the user's shell turns a doctor WARN into a copy-paste fix. Agents do not
+// depend on it: the artifacts skill falls back to `node <install>/bin/omp-web.js`.
+function printPathAdvice(linkResults) {
+  const link = linkResults.find((entry) => entry.item === "command link");
+  if (!link || !link.ok || link.action === "skipped") return;
+  const binDir = path.join(config.homeDir, ".local", "bin");
+  const onPath = (process.env.PATH || "").split(path.delimiter)
+    .some((entry) => entry && path.resolve(entry) === binDir);
+  if (onPath) return;
+  const shell = path.basename(process.env.SHELL || "");
+  const lines = [];
+  if (shell === "zsh") {
+    lines.push(`echo '${PATH_EXPORT_LINE}' >> ~/.zprofile`);
+  } else if (shell === "bash") {
+    lines.push(`echo '${PATH_EXPORT_LINE}' >> ~/.bashrc`);
+    lines.push(`echo '${PATH_EXPORT_LINE}' >> ~/.profile   # login shells; use ~/.bash_profile instead if you have one`);
+  } else if (shell === "fish") {
+    lines.push("fish_add_path ~/.local/bin");
+  } else {
+    lines.push(`echo '${PATH_EXPORT_LINE}' >> ~/.profile`);
+  }
+  console.log(`\n${binDir} is not on PATH, so \`omp-web\` is not a command in new shells yet. `
+    + `For ${shell || "your shell"}, run:\n${lines.map((line) => `  ${line}`).join("\n")}\n`
+    + `then open a new terminal. Agents work without it: the artifacts skill falls back to `
+    + `\`node ${fs.realpathSync(__filename)} artifact ...\`.`);
+}
+
 async function setup(args) {
   let options;
   try {
@@ -623,7 +719,9 @@ async function setup(args) {
     fail(error.message);
     return;
   }
-  for (const entry of ensureInstallLinks()) console.log(formatResult(entry));
+  const linkResults = ensureInstallLinks();
+  for (const entry of linkResults) console.log(formatResult(entry));
+  printPathAdvice(linkResults);
 
   console.log(`\nStart with: omp-web start\nOpen: http://${config.host}:${config.port}\n${authenticationInstruction()}`);
   if (options.skipOmpLogin) {
@@ -660,6 +758,7 @@ async function main() {
   if (command === "artifact") return require("./artifact-cli").runArtifact(args);
   if (command === "addresses") return require("./addresses-cli").runAddresses(args);
   if (command === "credential") return require("./credential-cli").runCredential(args);
+  if (command === "service") return require("./service-cli").runService(args);
   if (command === "setup") {
     if (args[0] === "-h" || args[0] === "--help") return usage();
     return setup(args);

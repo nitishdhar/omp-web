@@ -42,6 +42,13 @@ let versionPolling = false;
 let lastRenderedJson = null;
 let activityTimer = null;
 let refreshing = false;
+// A refresh() call that lands mid-poll is replayed once the poll finishes, so
+// a caller's "list again now" is never silently lost to the in-flight one.
+let refreshQueued = false;
+// Bumped when this tab opens a session it just created. A list requested
+// before that can predate the session; applying it would read the open
+// session as vanished and reset Chat, dropping the message just sent.
+let sessionsEpoch = 0;
 
 // Ghost detail: a dead session previewed in the main pane. Selecting a ghost
 // is mutually exclusive with a live session — the terminal and chat poll both
@@ -315,10 +322,12 @@ function restoreSavedSession() {
 }
 
 async function refresh() {
-  if (refreshing) return;
+  if (refreshing) { refreshQueued = true; return; }
   refreshing = true;
+  const epoch = sessionsEpoch;
   try {
     const { sessions, restorable } = await api("/sessions");
+    if (epoch !== sessionsEpoch) { refreshQueued = true; return; }
     state.sessions = sessions;
     state.restorable = Array.isArray(restorable) ? restorable : [];
     el["side-foot"].textContent = "";
@@ -356,6 +365,7 @@ async function refresh() {
     el["side-foot"].textContent = "offline: " + e.message;
   } finally {
     refreshing = false;
+    if (refreshQueued) { refreshQueued = false; void refresh(); }
   }
 }
 
@@ -505,6 +515,7 @@ async function openTerminal(id, known = null) {
 }
 
 function onAttachUi(session) {
+  sessionsEpoch++;
   openSession(session);
   refresh();
 }
@@ -516,9 +527,13 @@ async function startSessionWithMessage(text) {
   const { folder, profile } = defaultChoice();
   const base = sessionNameFrom(text);
   let lastError = null;
+  // The composer clears on Enter; until the session opens with the message
+  // queued, this notice is the only sign the send was taken.
+  showNotice("Starting session…", { duration: 30000 });
   for (let n = 1; n <= 5; n++) {
     try {
       const session = await requestSession({ name: n === 1 ? base : `${base} ${n}`, folder, profile, noTitle: true });
+      hideNotice();
       rememberChoice(folder, profile);
       if (state.mode !== "chat") setMode("chat");
       onAttachUi(session);
