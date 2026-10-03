@@ -42,7 +42,8 @@ const { handleApi } = require("./api/routes");
 const { startReaper } = require("./sessions/reaper");
 const { sendJson, sendError, listProfiles } = require("./api/util");
 const { handleArtifact } = require("./api/artifact-serve");
-const { syncBundledSkills } = require("./api/skills");
+const { migrateCustomDirectories } = require("./api/skills");
+const { ensureInstallLinks, logInstallLinks } = require("./api/install-links");
 
 const PUBLIC = path.join(__dirname, "public");
 const PUBLIC_REAL = fs.realpathSync(PUBLIC);
@@ -400,5 +401,8 @@ server.listen(config.port, config.host, () => {
   if (config.token) console.log("auth: token required");
   else console.log(`auth: OPEN — no access token${LOOPBACK_HOSTS.has(config.host) ? " (loopback only)" : " (network, OMP_WEB_ALLOW_OPEN=1)"}`);
   startReaper();
-  syncBundledSkills();
+  // Also covers checkouts (no global postinstall) and a reinstall followed
+  // by a service restart.
+  logInstallLinks(ensureInstallLinks());
+  void migrateCustomDirectories();
 });

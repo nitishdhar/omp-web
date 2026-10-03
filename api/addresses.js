@@ -47,30 +47,19 @@ function normalizePublicUrl(raw) {
   return parsed.origin;
 }
 
-// An environment value (including OMP_WEB_HOME/env) wins and locks the key.
-// A broken value is reported, never thrown: it would otherwise stop every
-// link from being printed.
-function publicUrlInfo() {
-  if (config.publicUrl) {
-    try {
-      return { value: normalizePublicUrl(config.publicUrl), source: "env" };
-    } catch (error) {
-      return { value: config.publicUrl, source: "env", error: `OMP_WEB_PUBLIC_URL: ${error.message}` };
-    }
-  }
+// Set only in Settings → General (settings.json `publicUrl`). A hand-edited
+// invalid value behaves as unset rather than stopping every link.
+function publicUrl() {
   const stored = getSetting("publicUrl");
-  if (typeof stored === "string" && stored) {
-    try {
-      return { value: normalizePublicUrl(stored), source: "settings" };
-    } catch {
-      /* hand-edited settings.json: behave as unset */
-    }
+  if (typeof stored !== "string" || !stored) return "";
+  try {
+    return normalizePublicUrl(stored);
+  } catch {
+    return "";
   }
-  return { value: "", source: null };
 }
 
 async function setPublicUrl(input) {
-  if (config.publicUrl) throw settingError("ELOCKED", "the public address is set by OMP_WEB_PUBLIC_URL; change it there");
   if (input !== null && typeof input !== "string") throw settingError("EBADSETTING", "publicUrl must be a string");
   const raw = (input || "").trim();
   await setSetting("publicUrl", raw ? normalizePublicUrl(raw) : undefined);
@@ -196,8 +185,8 @@ async function listAddresses() {
 
   // Someone else (a reverse proxy, Tailscale Serve) routes the public address
   // to this server, so the bind says nothing about it: the operator vouched.
-  const pub = publicUrlInfo();
-  if (pub.value && !pub.error) add("public", pub.value, true);
+  const pub = publicUrl();
+  if (pub) add("public", pub, true);
 
   const ts = await tailscale();
   const tsIp = ts?.ip || "";
@@ -233,11 +222,10 @@ async function linkBase() {
 
 async function addressesStatus() {
   const addresses = await listAddresses();
-  const { value, source, error } = publicUrlInfo();
   return {
     addresses,
     linkBase: pickLink(addresses),
-    publicUrl: error ? { value, source, error } : { value, source },
+    publicUrl: publicUrl(),
   };
 }
 

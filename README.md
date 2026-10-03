@@ -94,8 +94,9 @@ server directly from the checkout; it does not install a background service.
    `OMP_WEB_TOKEN` supplies one) — otherwise the console runs open on
    loopback;
 4. stores its own missing configuration values under `~/.omp-web` by default;
-   and
-5. offers to hand off to native OMP onboarding.
+5. checks the two [install links](#what-installing-changes-on-this-machine)
+   and prints what it created or repaired; and
+6. offers to hand off to native OMP onboarding.
 
 It does **not** copy, inspect, replace, or store OMP accounts, profiles,
 transcripts, or provider credentials. Existing `~/.omp-web` configuration and
@@ -220,6 +221,31 @@ omp-web setup
 omp-web
 ```
 
+## What installing changes on this machine
+
+Beyond the package itself, omp-web keeps exactly two links in your home
+directory, so agents can use it without any per-profile setup:
+
+| Link | Points at | Why |
+| --- | --- | --- |
+| `~/.agents/skills/omp-web-artifacts` | `<OMP_WEB_HOME>/skills/artifacts` | Every omp profile reads skills from `~/.agents/skills` (other agents that read that folder see it too), so every session gets the [Artifacts](#artifacts) skill. |
+| `~/.local/bin/omp-web` | this install's `bin/omp-web.js` | Puts `omp-web` on `PATH` for agents running `omp-web artifact ...`, as long as `~/.local/bin` is on your `PATH`. |
+
+A global install (`npm install --global ...`) creates them during install and
+prints one line per link (npm shows it with `--foreground-scripts`); `npm ci`
+in a source checkout does not touch your home directory. Every server start
+and `omp-web setup` check them again and
+repair them, which covers source checkouts and a reinstall followed by a
+restart. Only a missing link, a dangling link, or a link omp-web made earlier
+is ever replaced: a real file or directory at either path, or a
+`~/.local/bin/omp-web` that links to some other program, is left alone and
+reported. `omp-web doctor` shows both links and warns when `~/.local/bin` is
+not on `PATH`.
+
+To manage neither link, set `OMP_WEB_NO_INSTALL_LINKS=1` in the environment
+or in `OMP_WEB_HOME/env` before installing or starting. Removing omp-web
+leaves both links dangling; delete them by hand.
+
 ## Configuration and optional features
 
 `OMP_WEB_HOME` selects the omp-web data/config root and defaults to
@@ -240,7 +266,7 @@ both take precedence over the application default.
 | `OMP_WEB_SESSIONS_DIR` | `<OMP_WEB_OMP_HOME>/web-sessions` | Per-session OMP transcript directory. |
 | `OMP_WEB_ATTACHMENTS_DIR` | `<OMP_WEB_HOME>/attachments` | Private, per-session uploaded-attachment directory. |
 | `OMP_WEB_ARTIFACTS_DIR` | `<OMP_WEB_HOME>/artifacts` | Folder holding one subfolder per [artifact](#artifacts). |
-| `OMP_WEB_PUBLIC_URL` | empty | This console's public origin (e.g. `https://console.example`), when a reverse proxy or Tailscale Serve publishes it. Links use it first. Also settable in Settings → General → Addresses; when this variable is set it wins and Settings shows it locked. See [Addresses](#addresses). |
+| `OMP_WEB_NO_INSTALL_LINKS` | empty | Set to `1` to stop install, start and setup from creating or repairing `~/.agents/skills/omp-web-artifacts` and `~/.local/bin/omp-web`. See [What installing changes](#what-installing-changes-on-this-machine). |
 | `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux socket label. |
 | `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Minutes a Chat session's headless `omp` stays up after it settles before it exits. The next message starts it again. Also settable in Settings → Sessions & memory (1–1440); when this variable is set it wins and Settings shows it locked. |
@@ -289,7 +315,7 @@ configuration. In order:
 
 | Kind | Where it comes from |
 | --- | --- |
-| Public | `OMP_WEB_PUBLIC_URL`, else the public address saved in Settings. An origin only (`https://console.example`), no path. |
+| Public | The public address saved in **Settings → General → Addresses**, for when a reverse proxy or Tailscale Serve publishes this console. An origin only (`https://console.example`), no path. |
 | Tailscale name / IP | `tailscale status --json` when Tailscale is running: the machine's MagicDNS name (`http://<machine>.<tailnet>:<port>`) and first IPv4 (`http://100.x.y.z:<port>`). The CLI is found on `PATH`, else inside the macOS app; absent or stopped Tailscale just means no entries. Checked at most every 30 seconds. |
 | Local network | `http://<host>.local:<port>` on macOS, else the first non-loopback IPv4. |
 | This machine | `http://127.0.0.1:<port>`. |
@@ -371,13 +397,18 @@ directory listings. `check` also flags folders over 20 MB.
 
 **The skill.** omp-web ships an `artifacts` skill that teaches agents this
 workflow (update instead of duplicating, write `data.json` atomically, run
-`check`, reply with the link). On every start omp-web copies its bundled skills
-to `<OMP_WEB_HOME>/skills/`, a path that survives package upgrades. Switch the
-skill on per profile in **Settings → Profiles**, which adds that folder to the
-profile's `skills.customDirectories` through `omp config set` (other entries
-are kept). By hand, `omp [--profile=<name>] config set skills.customDirectories
-'[...existing entries, "<OMP_WEB_HOME>/skills"]'` does the same; the value
-replaces the whole list.
+`check`, reply with the link). omp-web copies its bundled skills to
+`<OMP_WEB_HOME>/skills/`, a path that survives package upgrades, and links it
+into `~/.agents/skills`, so every omp profile has the skill with no setup (see
+[What installing changes](#what-installing-changes-on-this-machine)). To turn
+it off for one profile, use the switch in **Settings → Profiles**, which adds
+`artifacts` to that profile's `skills.ignoredSkills` through `omp config set`
+(other entries are kept); switching it back on removes that entry. By hand,
+`omp [--profile=<name>] config set skills.ignoredSkills '[...existing entries,
+"artifacts"]'` does the same; the value replaces the whole list. Profiles that
+had the old opt-in switch on (`<OMP_WEB_HOME>/skills` in
+`skills.customDirectories`) have that entry removed on the next server start,
+since the skill would otherwise load twice.
 
 **Trust model.** A link `/a/<capability>/<slug>/` is a bearer capability:
 anyone holding it can read every file of that artifact, with no token and no
@@ -420,9 +451,9 @@ running `omp-web` afterwards so the new server code is live, then hard-reload
 the browser tab.
 
 Removing the source checkout or running `npm uninstall --global omp-web`
-removes the program only. It does not remove tmux sessions, OMP data, or
-`OMP_WEB_HOME`. Delete those separately only if you explicitly want to discard
-them.
+removes the program only. It does not remove tmux sessions, OMP data,
+`OMP_WEB_HOME`, or the two install links. Delete those separately only if you
+explicitly want to discard them.
 
 ## Security boundary
 

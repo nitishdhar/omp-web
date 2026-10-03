@@ -9,7 +9,8 @@ An artifact is a small static web page that omp-web serves at a private link.
 The user opens it from omp-web's Artifacts gallery or straight from the link
 (phone, chat message). You build it once; later runs update its data.
 
-Everything goes through the `omp-web artifact` command. If `omp-web` is not on
+Everything goes through the `omp-web artifact` command. Installing omp-web
+puts `omp-web` on `PATH` through `~/.local/bin`. If `omp-web` is still not on
 `PATH`, run `node <omp-web install folder>/bin/omp-web.js artifact ...`.
 
 ## 1. Look before you create

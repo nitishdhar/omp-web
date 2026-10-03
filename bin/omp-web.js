@@ -9,6 +9,7 @@ const path = require("path");
 const readline = require("readline/promises");
 const config = require("../config");
 const { listProfileDetails } = require("../api/util");
+const { ensureInstallLinks, inspectInstallLinks, formatResult } = require("../api/install-links");
 const { newestOwnedJsonl, readTranscriptTitle } = require("../transcripts");
 
 const MINIMUM_NODE_MAJOR = 22;
@@ -389,6 +390,9 @@ function doctor() {
     healthy = check(false, "node-pty native module", error.code || error.message) && healthy;
   }
 
+  // Warn-only: a missing link costs agents the PATH shortcut or the skill,
+  // and the server repairs it on its next start.
+  for (const row of inspectInstallLinks()) console.log(`${row.level} ${row.label} — ${row.detail}`);
   checkSessionPersistence();
   if (!healthy) {
     console.error("\nFix the failed prerequisites, then rerun `omp-web doctor`.");
@@ -602,6 +606,7 @@ async function setup(args) {
     fail(error.message);
     return;
   }
+  for (const entry of ensureInstallLinks()) console.log(formatResult(entry));
 
   console.log(`\nStart with: omp-web start\nOpen: http://${config.host}:${config.port}\n${authenticationInstruction()}`);
   if (options.skipOmpLogin) {

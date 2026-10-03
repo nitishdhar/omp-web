@@ -30,8 +30,7 @@ async function runAddresses(args) {
     console.log(`* links use ${status.linkBase} (the bind address)`);
   }
   console.log(`\n* = used for links (omp-web artifact url). Server binds ${config.host}:${config.port}.`);
-  if (status.publicUrl.error) console.log(`warning: ${status.publicUrl.error}`);
-  else if (!status.publicUrl.value) console.log("Set a public address in Settings → General, or OMP_WEB_PUBLIC_URL.");
+  if (!status.publicUrl) console.log("Set a public address in Settings → General.");
 }
 
 module.exports = { runAddresses };
