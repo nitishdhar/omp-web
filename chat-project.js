@@ -692,9 +692,11 @@ function project(entries, prev) {
         const toolName = boundedString(msg.toolName, 128);
         const details = msg.details && typeof msg.details === "object" ? msg.details : {};
         const isError = msg.isError === true;
-        // Hub job snapshots carry authoritative task lifecycle, including
+        // Job snapshots carry authoritative task lifecycle, including
         // cancellation/failure paths that do not emit async-result records.
-        if (toolName === "hub" && Array.isArray(details.jobs)) {
+        // Matched by shape, not tool name: OMP moved `wait` out of `hub` into
+        // its own tool, and agents finished through it stayed "running".
+        if (Array.isArray(details.jobs)) {
           const jobs = details.jobs.slice(0, MAX_SUBAGENTS);
           state.omitted.jobUpdates += Math.max(0, details.jobs.length - jobs.length);
           for (const job of jobs) {
