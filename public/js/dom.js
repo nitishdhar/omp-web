@@ -26,6 +26,7 @@ export function initDom() {
     "r-error", "r-cancel", "r-reload", "new-btn", "empty-new-btn", "m-cancel", "m-create",
     "sidebar-close", "theme-btn", "palette", "palette-btn", "palette-input", "palette-results",
     "settings-btn", "settings-profiles", "settings-legend", "settings-about",
+    "settings-addresses", "settings-public-form", "settings-public-url", "settings-public-save", "settings-public-note",
     "settings-preview-roots", "settings-preview-root-form", "settings-preview-root-input", "settings-preview-root-add",
     "settings-mode", "settings-nav", "settings-body",
     "settings-panels-list", "settings-panel-form", "settings-panel-label", "settings-panel-id", "settings-panel-url",

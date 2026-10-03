@@ -7,6 +7,7 @@ const { runtimeSettings, setRuntimeSettings } = require("./runtime-settings");
 const { getStats } = require("./stats");
 const { getStorage } = require("./storage-stats");
 const { skillsStatus, setSkillsInstalled } = require("./skills");
+const { addressesStatus, setAddresses } = require("./addresses");
 
 async function jsonBody(req) {
   return JSON.parse((await readBody(req)) || "{}") || {};
@@ -43,6 +44,12 @@ async function handleSettings(req, res, sub, url) {
         return true;
       case "PUT settings/skills":
         sendJson(res, 200, await setSkillsInstalled(await jsonBody(req)));
+        return true;
+      case "GET settings/addresses":
+        sendJson(res, 200, await addressesStatus());
+        return true;
+      case "PUT settings/addresses":
+        sendJson(res, 200, await setAddresses(await jsonBody(req)));
         return true;
       case "GET stats":
         sendJson(res, 200, await getStats());

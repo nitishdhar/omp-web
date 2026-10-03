@@ -72,7 +72,10 @@ omp-web artifact check <slug>   # exit 1 on errors; fix them, re-run
 omp-web artifact url <slug>
 ```
 
-End your reply with the URL from `omp-web artifact url <slug>`.
+End your reply with the URL from `omp-web artifact url <slug>`, exactly as
+printed. It is already absolute and points at an address other devices reach
+(the public address, else Tailscale, else the local network), so it opens on
+the user's phone. Never rewrite its host or prefix it with anything.
 
 ## Updating from a routine
 

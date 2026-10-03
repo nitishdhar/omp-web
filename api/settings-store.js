@@ -1,6 +1,6 @@
 "use strict";
 // The one reader/writer of OMP_WEB_HOME/settings.json, omp-web's own editable
-// preferences (keys: previewRoots, panels, runtime). Every caller re-reads so
+// preferences (keys: previewRoots, panels, runtime, publicUrl). Every caller re-reads so
 // a save applies on the next request without a restart; the stat-keyed cache
 // only skips re-parsing an unchanged file. Writes replace one key and keep
 // the rest, through temp + rename so a crash never leaves half a file.

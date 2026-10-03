@@ -20,6 +20,7 @@ function usage() {
        omp-web recover --list
        omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login] [--token]
        omp-web artifact <new|list|path|url|check|touch> ...
+       omp-web addresses [--json]
 
 Commands:
   start       Run omp-web in the foreground (the default command).
@@ -28,6 +29,7 @@ Commands:
               Never recreates sessions; explicit review only.
   setup       Configure a workspace, and with --token create a private access token.
   artifact    Create, list, link and check artifacts (run \`omp-web artifact --help\`).
+  addresses   List the addresses this console answers on; * marks the one links use.
 
 Setup options:
   --workspace PATH    Existing folder root shown by the project picker.
@@ -634,6 +636,7 @@ async function main() {
     return fail("usage: omp-web recover --list");
   }
   if (command === "artifact") return require("./artifact-cli").runArtifact(args);
+  if (command === "addresses") return require("./addresses-cli").runAddresses(args);
   if (command === "setup") {
     if (args[0] === "-h" || args[0] === "--help") return usage();
     return setup(args);
