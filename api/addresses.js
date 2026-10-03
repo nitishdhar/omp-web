@@ -109,10 +109,14 @@ function probeTailscale() {
   const bin = tailscaleBin();
   if (!bin) return Promise.resolve(null);
   return new Promise((resolve) => {
+    // The macOS app binary only acts as the CLI when told to; under launchd
+    // (no terminal) it otherwise starts as a background helper and never
+    // answers. Harmless for the plain `tailscale` CLI.
     childProcess.execFile(bin, ["status", "--json"], {
       timeout: TAILSCALE_TIMEOUT_MS,
       maxBuffer: TAILSCALE_BUFFER,
       encoding: "utf8",
+      env: { ...process.env, TAILSCALE_BE_CLI: "1" },
     }, (error, stdout) => {
       if (error) return resolve(null);
       try {
