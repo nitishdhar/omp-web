@@ -22,7 +22,7 @@
     <link rel="stylesheet" href="/sidebar.css?v=56" />
     <link rel="stylesheet" href="/terminal.css?v=68" />
     <link rel="stylesheet" href="/modals.css?v=24" />
-    <link rel="stylesheet" href="/settings.css?v=2" />
+    <link rel="stylesheet" href="/settings.css?v=3" />
     <link rel="stylesheet" href="/artifacts.css?v=1" />
     <link rel="stylesheet" href="/chat.css?v=60" />
   </head>
@@ -270,6 +270,17 @@
                   </div>
                 </div>
                 <div class="set-group">
+                  <h3>Addresses</h3>
+                  <p class="set-note set-note-lead">Where this console answers. Artifact links and Copy link use the address marked <strong>Links</strong>: the first reachable one, in the order shown.</p>
+                  <ul id="settings-addresses" class="set-addresses" aria-label="Console addresses"></ul>
+                  <label class="set-public-label" for="settings-public-url">Public address</label>
+                  <form id="settings-public-form" class="set-root-form" novalidate>
+                    <input id="settings-public-url" type="url" placeholder="https://console.example" autocomplete="off" autocapitalize="none" spellcheck="false" />
+                    <button id="settings-public-save" class="ghost" type="submit">Save</button>
+                  </form>
+                  <p id="settings-public-note" class="set-note">The address a reverse proxy or Tailscale Serve publishes. Leave empty to clear.</p>
+                </div>
+                <div class="set-group">
                   <h3>What the dots mean</h3>
                   <div id="settings-legend" class="set-legend"></div>
                 </div>
@@ -505,5 +516,5 @@
     <script src="/vendor/xterm.js"></script>
     <script src="/vendor/addon-fit.js"></script>
     <script src="/vendor/addon-web-links.js"></script>
-    <script type="module" src="/js/main.js?v=191"></script>
+    <script type="module" src="/js/main.js?v=192"></script>
 </html>

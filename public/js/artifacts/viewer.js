@@ -16,9 +16,10 @@ const frames = new Map(); // slug -> { frame, url }
 let shown = null; // the artifact object on screen, null in the gallery
 
 // Links leave this tab (new tab, chat apps, the phone), so they must carry
-// the origin; the API only returns the path.
+// an origin other devices reach: the server's `link` (api/addresses.js), else
+// whatever origin this tab is on.
 export function absoluteUrl(artifact) {
-  return new URL(artifact.url, location.origin).href;
+  return artifact.link || new URL(artifact.url, location.origin).href;
 }
 
 export function showViewer(artifact) {

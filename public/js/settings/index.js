@@ -15,11 +15,12 @@ import * as sessionsSection from "./sessions.js";
 import * as storageSection from "./storage.js";
 import * as ompSection from "./omp.js";
 import * as skillsSection from "./skills.js";
+import * as addressesSection from "./addresses.js";
 
 export { watchOmpUpdates } from "./omp.js";
 
 const SECTIONS = {
-  general: {},
+  general: addressesSection,
   omp: ompSection,
   panels: panelsSection,
   sessions: sessionsSection,
@@ -100,5 +101,6 @@ export function wireSettings() {
   sessionsSection.wire();
   storageSection.wire();
   ompSection.wire();
+  addressesSection.wire();
   activate(active);
 }

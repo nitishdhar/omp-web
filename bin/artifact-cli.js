@@ -1,12 +1,14 @@
 "use strict";
 // `omp-web artifact ...`: what agents (and the bundled skill) use to create,
-// find, link and validate artifacts. Paths and links come from config.js, so
-// OMP_WEB_HOME and its env overlay apply exactly as they do for the server.
+// find, link and validate artifacts. Paths come from config.js, so
+// OMP_WEB_HOME and its env overlay apply exactly as they do for the server;
+// links come from api/addresses.js, the same resolver the server uses.
 const fs = require("fs");
 const path = require("path");
 const config = require("../config");
 const store = require("../api/artifact-store");
 const { checkArtifact } = require("../api/artifact-check");
+const { linkBase } = require("../api/addresses");
 
 const TEMPLATES_DIR = path.join(__dirname, "..", "artifact-templates");
 const TEMPLATES = ["list", "table", "cards", "blank"];
@@ -19,7 +21,8 @@ const USAGE = `Usage: omp-web artifact new <slug> --title TITLE [--description T
        omp-web artifact touch <slug>
 
 Artifacts live in ${config.artifactsDir}.
-Links use OMP_WEB_PUBLIC_URL when set, else http://127.0.0.1:<port>.`;
+Links use the first reachable of: public address, Tailscale name, Tailscale IP,
+local network, this machine (see omp-web addresses).`;
 
 function codedError(message) {
   const error = new Error(message);
@@ -52,22 +55,8 @@ function parseArgs(args, valued, flags = []) {
   return { options, positional };
 }
 
-function baseUrl() {
-  if (!config.publicUrl) return `http://127.0.0.1:${config.port}`;
-  let parsed;
-  try {
-    parsed = new URL(config.publicUrl);
-  } catch {
-    throw codedError("OMP_WEB_PUBLIC_URL is not a valid URL");
-  }
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-    throw codedError("OMP_WEB_PUBLIC_URL must be an http(s) URL");
-  }
-  return config.publicUrl;
-}
-
-function absoluteUrl(slug) {
-  return baseUrl() + store.artifactPath(slug);
+async function absoluteUrl(slug) {
+  return (await linkBase()) + store.artifactPath(slug);
 }
 
 function oneSlug(positional, command) {
@@ -95,7 +84,7 @@ function relativeAge(ms) {
   return `${Math.round(minutes / 1440)}d ago`;
 }
 
-function create(args) {
+async function create(args) {
   const { options, positional } = parseArgs(args, ["title", "description", "project", "template"]);
   const slug = oneSlug(positional, "new");
   const template = options.template || "list";
@@ -130,13 +119,13 @@ function create(args) {
   // Written last: list skips a folder until its manifest exists.
   store.writeFileAtomic(path.join(dir, store.MANIFEST), JSON.stringify(manifest, null, 2) + "\n");
   console.log(dir);
-  console.log(absoluteUrl(slug));
+  console.log(await absoluteUrl(slug));
 }
 
-function list(args) {
+async function list(args) {
   const { options, positional } = parseArgs(args, [], ["json"]);
   if (positional.length) throw codedError("usage: omp-web artifact list [--json]");
-  const base = baseUrl();
+  const base = await linkBase();
   const artifacts = store.listArtifacts().map((artifact) => ({
     ...artifact,
     url: base + artifact.url,
@@ -166,14 +155,14 @@ function check(args) {
   if (errors) process.exitCode = 1;
 }
 
-function runArtifact(args) {
+async function runArtifact(args) {
   const [command, ...rest] = args;
   try {
     switch (command) {
-      case "new": return create(rest);
-      case "list": return list(rest);
+      case "new": return await create(rest);
+      case "list": return await list(rest);
       case "path": return console.log(store.artifactDir(existingSlug(parseArgs(rest, []).positional, "path")));
-      case "url": return console.log(absoluteUrl(existingSlug(parseArgs(rest, []).positional, "url")));
+      case "url": return console.log(await absoluteUrl(existingSlug(parseArgs(rest, []).positional, "url")));
       case "check": return check(rest);
       case "touch": {
         const slug = existingSlug(parseArgs(rest, []).positional, "touch");

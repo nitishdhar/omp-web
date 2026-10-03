@@ -147,6 +147,7 @@ such as `python` and `speech`. It is not an account or profile command.
 | `omp-web doctor` | Report platform, Node, tmux, OMP, workspace, and node-pty prerequisites without starting sessions or reading/changing native OMP credentials or profiles. |
 | `omp-web setup [--workspace PATH] [--profile NAME] [--skip-omp-login]` | Set up only omp-web and optionally hand off to native OMP. |
 | `omp-web artifact <new\|list\|path\|url\|check\|touch>` | Create and maintain [artifacts](#artifacts); `omp-web artifact --help` lists the options. |
+| `omp-web addresses [--json]` | List the addresses this console answers on, whether each is reachable with the current bind, and which one links use. Works while the server is down. See [Addresses](#addresses). |
 | `omp-web --help` | Show command help. |
 | `npm start` | Start the server directly from a source checkout. |
 | `npm run doctor` / `npm run setup` | Source-checkout equivalents of the CLI commands. |
@@ -239,7 +240,7 @@ both take precedence over the application default.
 | `OMP_WEB_SESSIONS_DIR` | `<OMP_WEB_OMP_HOME>/web-sessions` | Per-session OMP transcript directory. |
 | `OMP_WEB_ATTACHMENTS_DIR` | `<OMP_WEB_HOME>/attachments` | Private, per-session uploaded-attachment directory. |
 | `OMP_WEB_ARTIFACTS_DIR` | `<OMP_WEB_HOME>/artifacts` | Folder holding one subfolder per [artifact](#artifacts). |
-| `OMP_WEB_PUBLIC_URL` | empty | This console's public origin (e.g. `https://console.example`). `omp-web artifact url` prints links under it; without it links use `http://127.0.0.1:<port>`. |
+| `OMP_WEB_PUBLIC_URL` | empty | This console's public origin (e.g. `https://console.example`), when a reverse proxy or Tailscale Serve publishes it. Links use it first. Also settable in Settings → General → Addresses; when this variable is set it wins and Settings shows it locked. See [Addresses](#addresses). |
 | `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux socket label. |
 | `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Minutes a Chat session's headless `omp` stays up after it settles before it exits. The next message starts it again. Also settable in Settings → Sessions & memory (1–1440); when this variable is set it wins and Settings shows it locked. |
@@ -279,6 +280,27 @@ it. Running sessions keep the old binary until restarted, so **Reload
 profiles** then refreshes every profile's model catalog
 (`omp --profile=<name> models refresh`) and restarts idle sessions still on the
 old version; busy ones are skipped.
+
+### Addresses
+
+omp-web works out its own addresses, so links it hands out (artifact links,
+**Copy link**, `omp-web artifact url`) open on other devices without any
+configuration. In order:
+
+| Kind | Where it comes from |
+| --- | --- |
+| Public | `OMP_WEB_PUBLIC_URL`, else the public address saved in Settings. An origin only (`https://console.example`), no path. |
+| Tailscale name / IP | `tailscale status --json` when Tailscale is running: the machine's MagicDNS name (`http://<machine>.<tailnet>:<port>`) and first IPv4 (`http://100.x.y.z:<port>`). The CLI is found on `PATH`, else inside the macOS app; absent or stopped Tailscale just means no entries. Checked at most every 30 seconds. |
+| Local network | `http://<host>.local:<port>` on macOS, else the first non-loopback IPv4. |
+| This machine | `http://127.0.0.1:<port>`. |
+
+Each address is marked reachable or not from `OMP_WEB_HOST`: a loopback bind
+reaches only this machine, a bind to one address reaches only that address
+(binding the Tailscale IP also covers the Tailscale name), and `0.0.0.0` or
+`::` reaches all. The public address is always treated as reachable, since a
+proxy, not the bind, routes it. Links use the first reachable address in the
+order above. **Settings → General → Addresses** lists them with Copy buttons
+and edits the public address; `omp-web addresses` prints the same list.
 
 ### Panels
 
@@ -338,7 +360,7 @@ stays the same.
 omp-web artifact new todo --title "To-do" --template list   # list, table, cards or blank
 omp-web artifact list [--json]
 omp-web artifact path todo     # the folder
-omp-web artifact url todo      # the link (uses OMP_WEB_PUBLIC_URL when set)
+omp-web artifact url todo      # the link, absolute (see Addresses)
 omp-web artifact check todo    # manifest, entry, file types, size, JSON, external URLs, symlinks
 omp-web artifact touch todo    # bump updatedAt after changing files
 ```

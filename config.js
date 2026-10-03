@@ -82,8 +82,8 @@ const config = {
   // Bundled skills are copied here on start so a profile's
   // skills.customDirectories keeps a path that survives package upgrades.
   skillsDir: path.join(OWP_DIR, "skills"),
-  // Public origin of this console (e.g. https://console.example), used only
-  // to print absolute artifact links from the CLI.
+  // Public origin of this console (e.g. https://console.example). Set here it
+  // wins over Settings; api/addresses.js puts it first for absolute links.
   publicUrl: (process.env.OMP_WEB_PUBLIC_URL || "").trim().replace(/\/+$/, ""),
 
   // Voice input transcription. The browser records audio and POSTs it to
