@@ -21,6 +21,7 @@ const {
   normalizedSessionStatus,
 } = require("./sessions/status");
 const registry = require("./registry");
+const purgeData = require("./sessions/purge");
 const { listFolders } = require("./api/util");
 
 // Thin wrapper around a dedicated tmux server (socket `config.tmuxSocket`).
@@ -619,31 +620,68 @@ async function restore(ids, { folder } = {}) {
   return results;
 }
 
-// Forget a ghost, whether registry or transcript-fallback. Drops registry entry
-// or marks transcript-fallback as forgotten. Throws ENOSESSION if neither found.
-// Transcripts are untouched; forgotten marker prevents restorable() from listing.
+// Forget a ghost, whether registry or transcript-fallback: drop any registry
+// entry and always mark the id forgotten. Dropping the entry alone let the
+// transcript scan list the same session again on the next refresh.
+// Transcripts are untouched. Throws ENOSESSION if neither found.
 function forgetGhost(id) {
   if (typeof id !== "string" || !SESSION_ID.test(id)) {
     throw sessionError("EBADID", "invalid session id");
   }
   try {
-    // Try registry entry first (most common path for pinned sessions).
-    if (registry.remove(id)) return true;
-    // Check if it's a transcript-fallback ghost (no registry but has transcript dir).
-    const substantive = substantiveOwnedJsonl(id);
-    const folder = substantive && sessionCwdFor(id);
-    if (substantive && folder) {
-      // Mark as forgotten so restorable() excludes it going forward.
-      registry.forget(id);
-      return true;
+    const hadEntry = registry.remove(id);
+    const substantive = !hadEntry && substantiveOwnedJsonl(id);
+    if (!hadEntry && !(substantive && sessionCwdFor(id))) {
+      throw sessionError("ENOSESSION", "session not found");
     }
-    // Neither registry nor transcript-fallback ghost found.
-    throw sessionError("ENOSESSION", "session not found");
+    registry.forget(id);
+    return true;
   } catch (error) {
     if (error && error.code === "ENOSESSION") throw error;
     console.error(`registry forget failed (${id}): ${error.message}`);
     throw sessionError("EINTERNAL", "could not forget session");
   }
+}
+
+// macOS paths are case-insensitive: ids differing only in case share one data
+// directory, so deleting one would delete the other's transcripts too. Disk
+// names count as well: a transcript-only ghost has no live or registry id.
+async function caseTwin(id) {
+  const lower = id.toLowerCase();
+  const ids = new Set([
+    ...(await list()).map((session) => session.id),
+    ...Object.keys(registry.readRegistry().entries),
+    ...purgeData.dataDirNames(),
+  ]);
+  for (const other of ids) {
+    if (other !== id && other.toLowerCase() === lower) return other;
+  }
+  return null;
+}
+
+/** What Delete would remove, and whether the session is running. */
+async function footprint(id) {
+  if (typeof id !== "string" || !SESSION_ID.test(id)) {
+    throw sessionError("EBADID", "invalid session id");
+  }
+  return { ...purgeData.footprint(id), live: Boolean(await get(id)), twin: await caseTwin(id) };
+}
+
+// Delete: stop the session if it is running, then remove its transcripts,
+// uploads, registry entry and forgotten marker. Irreversible by design.
+async function purgeNow(id) {
+  const twin = await caseTwin(id);
+  if (twin) {
+    throw sessionError("ECONFLICT", `${twin} shares this session's data folder; delete is refused`);
+  }
+  const live = Boolean(await get(id));
+  const { entries, forgotten } = registry.readRegistry();
+  const known = live || Boolean(entries[id]) || forgotten.includes(id) || purgeData.footprint(id).parts.length > 0;
+  if (!known) throw sessionError("ENOSESSION", "session not found");
+  if (live) await killNow(id);
+  const freed = purgeData.removeData(id);
+  registry.purge(id);
+  return freed;
 }
 
 async function resolvePane(id) {
@@ -1086,6 +1124,13 @@ function kill(id) {
   return enqueueSessionOperation(id, () => killNow(id));
 }
 
+function purge(id) {
+  if (typeof id !== "string" || !SESSION_ID.test(id)) {
+    return Promise.reject(sessionError("EBADID", "invalid session id"));
+  }
+  return enqueueSessionOperation(id, () => purgeNow(id));
+}
+
 function reloadProfile(id, options = {}) {
   return enqueueSessionOperation(id, () => reloadProfileNow(id, options));
 }
@@ -1242,5 +1287,5 @@ module.exports = {
   list, get, exists, create, setPinned, renameTitle, scroll, scrollState, setScrollPosition,
   kill, reloadProfile, tmuxName, tmuxPane, resolvePane, bootstrap, OPT_KEYS,
   sendText, sendKeys, configuredEffortFor, contextWindowFor, launchIdentityFor, restorable,
-  restore, forgetGhost,
+  restore, forgetGhost, footprint, purge,
 };

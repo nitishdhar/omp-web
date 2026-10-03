@@ -41,12 +41,13 @@ export function ensureSkeleton() {
   actions.append(elem("button", { id: "ghost-back-btn", class: "ghost", type: "button", text: "Back", title: "Back to the live session" }));
   actions.append(elem("button", { id: "ghost-restore-btn", class: "primary", type: "button", text: "Restore session" }));
   actions.append(elem("button", { id: "ghost-copy-btn", class: "ghost", type: "button", text: "Copy folder path" }));
-  actions.append(elem("button", { id: "ghost-forget-btn", class: "danger ghost", type: "button", text: "Forget" }));
+  actions.append(elem("button", { id: "ghost-forget-btn", class: "ghost", type: "button", text: "Forget", title: "Hide from Not running; files stay on disk" }));
+  actions.append(elem("button", { id: "ghost-delete-btn", class: "danger ghost", type: "button", text: "Delete…", title: "Remove transcripts and uploads for good" }));
   section.append(actions);
   host.append(section);
   el["ghost-mode"] = section;
   for (const id of ["ghost-title", "ghost-summary", "ghost-meta",
-    "ghost-back-btn", "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn"]) {
+    "ghost-back-btn", "ghost-restore-btn", "ghost-copy-btn", "ghost-forget-btn", "ghost-delete-btn"]) {
     const node = section.querySelector(`#${CSS.escape(id)}`);
     if (node) el[id] = node;
   }

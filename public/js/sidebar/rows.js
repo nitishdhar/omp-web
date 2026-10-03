@@ -398,10 +398,15 @@ function openGhostMenu(anchor, ghost) {
       action: () => copyWithNotice(ghost.folder, "Copied path"),
     },
     {
-      label: "Forget",
+      label: "Forget (hide)",
       icon: "x",
-      danger: true,
       action: () => emit("session:forget", ghost.id),
+    },
+    {
+      label: "Delete…",
+      icon: "trash",
+      danger: true,
+      action: () => emit("session:delete", ghost.id),
     },
   ], [
     { label: "Folder", value: ghost.folder || "—" },

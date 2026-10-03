@@ -409,6 +409,53 @@ async function forgetGhost(id) {
   } catch (e) { showNotice("Forget failed: " + e.message, { tone: "error" }); }
 }
 
+function formatBytes(bytes) {
+  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
+  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+// Delete is the irreversible counterpart to Forget: the confirmation states
+// what will be removed and how much, measured by the server just before.
+async function deleteSession(id) {
+  if (!id) return;
+  const known = state.sessions.find((s) => s.id === id) || state.restorable.find((g) => g.id === id);
+  const name = known?.title || id;
+  let info;
+  try {
+    info = await api(`/sessions/${encodeURIComponent(id)}/footprint`);
+  } catch (e) { showNotice("Delete failed: " + e.message, { tone: "error" }); return; }
+  if (info.twin) {
+    showNotice(`Can't delete ${name}: ${info.twin} shares its data folder`, { tone: "error", duration: 6000 });
+    return;
+  }
+  const size = info.files ? `${formatBytes(info.bytes)} in ${info.files} file${info.files === 1 ? "" : "s"}` : "no files on disk";
+  const lines = [
+    `Delete "${name}" permanently?`,
+    "",
+    ...(info.live ? ["It is running and will be stopped first."] : []),
+    `Removes its transcripts and uploads (${size}). It cannot be restored afterwards.`,
+  ];
+  if (!confirm(lines.join("\n"))) return;
+  try {
+    const wasCurrent = state.current === id;
+    const result = await api(`/sessions/${encodeURIComponent(id)}/data`, { method: "DELETE" });
+    if (info.live) {
+      terminal.removeSessionView(id);
+      if (wasCurrent) {
+        closeFileViewer();
+        chat.resetChat();
+        activateQuickkeysSession(null);
+        el["mode-toggle"].hidden = false;
+      }
+    }
+    if (state.selectedGhost === id) clearGhostView();
+    await refresh();
+    showNotice(`Deleted ${name} · freed ${formatBytes(result.freed?.bytes || 0)}`);
+  } catch (e) { showNotice("Delete failed: " + e.message, { tone: "error" }); }
+}
+
 let syncViewportInset = () => {};
 
 // Keep the PTY connected in chat mode; defer hidden resize work until the
@@ -631,6 +678,7 @@ get("session:switchModel", (choice) => switchSessionModel(choice));
 get("session:newInFolder", (folder) => modals.openModal(folder));
 get("session:restore", ({ ids, folder }) => restoreSessions(ids, { folder }));
 get("session:forget", (id) => forgetGhost(id));
+get("session:delete", (id) => deleteSession(id));
 get("ghost:select", (id) => selectGhost(id));
 // Ghost detail actions live on the static skeleton in index.html; they act on
 // whichever ghost is currently selected.
@@ -646,6 +694,12 @@ el["ghost-copy-btn"].onclick = () => {
 el["ghost-forget-btn"].onclick = () => {
   if (state.selectedGhost) forgetGhost(state.selectedGhost);
 };
+// A tab holding an older cached shell has no Delete button in the detail view.
+if (el["ghost-delete-btn"]) {
+  el["ghost-delete-btn"].onclick = () => {
+    if (state.selectedGhost) deleteSession(state.selectedGhost);
+  };
+}
 // Back returns to the parked live session (or empty chrome when none): the
 // same clearGhost flow as opening a session, guarded for cached old shells.
 if (el["ghost-back-btn"]) el["ghost-back-btn"].onclick = () => clearGhostView();

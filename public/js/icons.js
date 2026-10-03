@@ -12,6 +12,7 @@ const ICONS = {
   x: `<path d="m3 3 10 10M13 3 3 13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
   list: `<path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>`,
   branch: `<circle cx="5" cy="4" r="2.1" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="5" cy="12" r="2.1" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="11" cy="4" r="2.1" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M5 6.1v3.8M11 6.1c0 2.8-2.2 3.2-4 3.7" fill="none" stroke="currentColor" stroke-width="1.5"/>`,
+  trash: `<path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4M6.8 6.5v5M9.2 6.5v5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`,
 };
 
 export function icon(name, size = 14) {

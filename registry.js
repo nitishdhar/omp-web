@@ -188,4 +188,18 @@ function forget(id) {
   return true;
 }
 
-module.exports = { readRegistry, writeRegistry, upsert, remove, forget };
+// Delete: the session's data is gone, so neither the entry nor a forgotten
+// marker has anything left to describe.
+function purge(id) {
+  if (typeof id !== "string" || !SESSION_ID.test(id)) {
+    throw registryError("EBADID", "invalid session id");
+  }
+  const { entries, forgotten } = readRegistry();
+  const had = Boolean(entries[id]) || forgotten.includes(id);
+  if (!had) return false;
+  delete entries[id];
+  writeRegistry(entries, forgotten.filter((other) => other !== id));
+  return true;
+}
+
+module.exports = { readRegistry, writeRegistry, upsert, remove, forget, purge };
