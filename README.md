@@ -1,10 +1,10 @@
 # omp-web
 
 `omp-web` is a localhost web console for a single user on their own machine who already uses
-[OMP](https://omp.sh/). It runs the native `omp` terminal inside its own tmux
-server, so the Terminal view is the real OMP TUI. The optional Chat view is a
-projection of that same session's transcript; it never starts a competing
-agent process.
+[OMP](https://omp.sh/). Each session lives in its own tmux server. Chat runs
+`omp` headless (`--mode rpc-ui`) only while it is working, so an idle session
+uses no agent process; opening Terminal starts the real OMP TUI on the same
+transcript. A session never has two agent processes at once.
 
 It is intentionally a local companion, not a hosted service. A new
 installation listens at `http://127.0.0.1:7799`.
@@ -239,6 +239,8 @@ both take precedence over the application default.
 | `OMP_WEB_ATTACHMENTS_DIR` | `<OMP_WEB_HOME>/attachments` | Private, per-session uploaded-attachment directory. |
 | `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux socket label. |
+| `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Minutes a Chat session's headless `omp` stays up after it settles before it exits. The next message starts it again. |
+| `OMP_WEB_TUI_IDLE_MINUTES` | `30` | Minutes an idle Terminal (TUI) session with no open terminal waits before it is handed back to the headless Chat runner. |
 | `OMP_WEB_TOKEN` | empty | Access token. When set, HTTP and WebSocket endpoints require it; `setup --token` creates the file instead. Keep it private; do not commit or share it. |
 | `OMP_WEB_ALLOW_OPEN` | empty | Set to `1` to run with no access token on a non-loopback bind. Accepts that anyone reaching the port controls the sessions; the server refuses open LAN binds without it. |
 | `OMP_WEB_TRANSCRIBE_BASE_URL` | empty | OpenAI-compatible transcription service base URL. |

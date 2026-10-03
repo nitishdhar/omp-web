@@ -21,7 +21,7 @@ import { wireSettings, renderSettings } from "./settings.js";
 import { createVoiceController } from "./voice.js";
 import { suppressTailScroll } from "./chat/transcript.js";
 import { closeFileViewer, openFileViewer } from "./file-viewer.js";
-import { showNotice, copyWithNotice } from "./notice.js";
+import { showNotice, hideNotice, copyWithNotice } from "./notice.js";
 import { defaultChoice, sessionNameFrom, requestSession, rememberChoice } from "./new-session.js";
 
 const voice = createVoiceController();
@@ -51,6 +51,10 @@ function clearGhostView() {
   // resume its host, header and scrubber with no replay, or fall back to
   // the empty chrome when it was disposed while parked.
   terminal.resumeCurrent();
+  // The stored preference may be Terminal; a Chat (rpc) session still has no
+  // TUI to show, so it comes back in Chat as openSession() would show it.
+  const resumed = state.sessions.find((session) => session.id === state.current);
+  if (resumed?.runner === "rpc" && state.view !== "chat") applyMode("chat");
   emit("sidebar:rerender");
 }
 function selectGhost(id) {
@@ -96,6 +100,12 @@ function openSession(session) {
     // user's persisted Agent-session view preference.
     applyMode("terminal");
     chat.resetChat({ discardPrevious: false });
+  } else if (session.runner === "rpc") {
+    // A Chat session starts omp only when you send. Opening one never starts
+    // a TUI: the Terminal preference applies to sessions already running one,
+    // and the Terminal toggle is the explicit way in. Session-local, like the
+    // shell constraint above, so the stored preference is untouched.
+    applyMode("chat");
   } else {
     applyMode(state.mode);
     if (state.mode !== "chat") chat.enterChat(session.id);
@@ -332,6 +342,44 @@ async function switchSessionModel({ id, model, effort }) {
   } catch (e) { showNotice("Switch failed: " + e.message, { tone: "error" }); }
 }
 
+const openingTerminal = new Set();
+// Terminal on an rpc session needs a TUI first: the server stops the bridge
+// and respawns the pane, or refuses with EBUSY while a turn is running. A
+// just-created session opens before refresh() lists it, so the caller may pass
+// the row it already holds.
+async function openTerminal(id, known = null) {
+  const session = state.sessions.find((s) => s.id === id) || known;
+  if (!session || session.type === "shell") return;
+  if (session.runner !== "rpc") {
+    if (state.current === id) { setMode("terminal"); applyMode("terminal"); }
+    return;
+  }
+  if (openingTerminal.has(id)) return;
+  openingTerminal.add(id);
+  showNotice("Starting terminal…", { duration: 30000 });
+  try {
+    const result = await api(`/sessions/${encodeURIComponent(id)}/runner`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ runner: "tui" }),
+    });
+    // refresh() skips while another poll is in flight; the response is the
+    // authoritative row, so a repeat toggle never re-posts the conversion.
+    const index = state.sessions.findIndex((s) => s.id === id);
+    if (index >= 0) state.sessions[index] = result?.session || { ...state.sessions[index], runner: "tui" };
+    await refresh();
+    hideNotice();
+    if (state.current === id) { setMode("terminal"); applyMode("terminal"); }
+  } catch (e) {
+    const message = e.code === "EBUSY"
+      ? (e.message || "Finishing the current turn; try again or Stop")
+      : "Could not open Terminal: " + e.message;
+    showNotice(message, { tone: "error", duration: 5000 });
+  } finally {
+    openingTerminal.delete(id);
+  }
+}
+
 function onAttachUi(session) {
   openSession(session);
   refresh();
@@ -463,6 +511,7 @@ let syncViewportInset = () => {};
 function applyMode(mode) {
   const current = state.sessions.find((session) => session.id === state.current);
   if (mode === "chat" && current?.type === "shell") mode = "terminal";
+  state.view = mode;
   el["chat-mode"].hidden = (mode !== "chat");
   el.main.classList.toggle("chat-active", mode === "chat");
   terminal.setVisible(mode === "terminal");
@@ -720,6 +769,13 @@ get("file:open", ({ path }) => openFileViewer({ sessionId: state.current, path }
 get("auth:required", () => {
   if (el.authgate.hidden) showAuth("Your token is no longer accepted. Unlock to reconnect.");
 });
-get("mode:change", (mode) => { setMode(mode); applyMode(mode); });
+get("mode:change", (mode) => {
+  const current = state.sessions.find((s) => s.id === state.current);
+  if (mode === "terminal" && current?.runner === "rpc") { void openTerminal(current.id); return; }
+  setMode(mode);
+  applyMode(mode);
+});
+get("session:openTerminal", (id) => openTerminal(id));
+get("chat:answer", (answer) => chat.answerAsk(answer));
 get("meta:refreshed", renderSettings);
 boot();

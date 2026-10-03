@@ -31,6 +31,7 @@ try {
 }
 const sessions = require("./sessions");
 const { handleApi } = require("./api/routes");
+const { startReaper } = require("./sessions/reaper");
 const { sendJson, sendError, listProfiles } = require("./api/util");
 
 const PUBLIC = path.join(__dirname, "public");
@@ -374,4 +375,5 @@ server.listen(config.port, config.host, () => {
   console.log(`profiles:  ${listProfiles().join(", ")}`);
   if (config.token) console.log("auth: token required");
   else console.log(`auth: OPEN — no access token${LOOPBACK_HOSTS.has(config.host) ? " (loopback only)" : " (network, OMP_WEB_ALLOW_OPEN=1)"}`);
+  startReaper();
 });

@@ -222,6 +222,15 @@ async function handleApi(req, res, url) {
       return sendError(res, error);
     }
   }
+  if (req.method === "POST" && sub[0] === "sessions" && sub[1] && sub[2] === "runner" && sub.length === 3) {
+    try {
+      const body = JSON.parse((await readBody(req)) || "{}");
+      const session = await sessions.setRunner(sub[1], body && body.runner);
+      return sendJson(res, 200, { session });
+    } catch (error) {
+      return sendError(res, error);
+    }
+  }
   if (req.method === "GET" && sub[0] === "profiles" && sub[1] && sub[2] === "models" && sub.length === 3) {
     try {
       return sendJson(res, 200, { models: await listModels(sub[1]) });

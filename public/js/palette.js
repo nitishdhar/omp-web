@@ -54,7 +54,12 @@ function commandEntries() {
         kind: "command",
         label: "Switch mode",
         hint: "terminal / chat",
-        run: () => emit("mode:change", state.mode === "chat" ? "terminal" : "chat"),
+        // An rpc session has no TUI until main converts it; that path owns
+        // the busy-turn refusal.
+        run: () => {
+          if (state.view === "chat" && current.runner === "rpc") emit("session:openTerminal", current.id);
+          else emit("mode:change", state.view === "chat" ? "terminal" : "chat");
+        },
       });
     }
   }

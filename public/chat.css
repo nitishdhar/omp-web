@@ -550,6 +550,26 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
 .cask-label { color: var(--text); font-weight: 600; }
 .cask-desc { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
 .cask-switch { width: 100%; min-height: 40px; margin-top: 10px; }
+/* Answerable card (rpc sessions): the option rows become the buttons, so the
+   read-only and answerable cards share one silhouette. */
+.cask-message { margin: -4px 0 8px; color: var(--muted); font-size: 12.5px; line-height: 1.5; white-space: pre-wrap; }
+.cask-choice { display: block; width: 100%; min-height: 36px; color: var(--text); font: inherit; font-size: 12px; text-align: left; cursor: pointer; }
+.cask-choice:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.cask-choice[aria-expanded="true"] { border-color: var(--accent); }
+.cask-text { display: flex; align-items: flex-end; gap: 6px; margin-top: 8px; }
+.cask-input {
+  flex: 1; min-width: 0; min-height: 36px; max-height: 140px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);
+  color: var(--text); font-size: 13px; line-height: 1.4; resize: vertical;
+}
+.cask-input:focus { border-color: var(--accent); outline: none; }
+.cask-send, .cask-action { min-height: 36px; }
+.cask-actions { display: flex; gap: 8px; }
+.cask-action { min-width: 76px; }
+.cask-footer { display: flex; justify-content: flex-end; }
+.cask-dismiss { min-height: 32px; color: var(--muted); font-size: 12px; }
+#chat-ask[aria-busy="true"] .cask-q { opacity: .6; }
+#chat-ask[data-request-id] .cask-q { margin-bottom: 6px; }
 
 .chat-advisor { margin-bottom: 8px; padding: 10px 12px; border: 1px solid var(--line); border-left: 3px solid var(--line-strong); border-radius: 10px; background: var(--panel); }
 .chat-advisor-nit { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 5%, var(--panel)); }
@@ -605,6 +625,7 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
   .chat-jump-latest, .chat-action-btn, .chat-code-copy, .chat-history-reveal, .chat-user-disclosure { min-height: 44px; }
   .chat-message-actions { opacity: 1; pointer-events: auto; }
   .chat-icon-action { width: 44px; height: 44px; }
+  .cask-choice, .cask-input, .cask-send, .cask-action, .cask-dismiss { min-height: 44px; }
 }
 @media (max-width: 600px) {
   #chat-log { gap: 14px; padding: 20px 15px; scrollbar-gutter: auto; }
@@ -621,6 +642,10 @@ h4.chat-heading, h5.chat-heading, h6.chat-heading { margin-top: 18px; font-size:
   #chat-input { min-height: 44px; padding-inline: 6px; font-size: 16px; }
   #chat-advisor { padding: 9px 11px; }
   #chat-ask { max-height: min(32dvh, 240px); padding: 12px; }
+  /* An answerable card holds its own controls, so it gets more of the pane
+     than the read-only summary before it scrolls. */
+  #chat-ask[data-request-id] { max-height: min(44dvh, 340px); }
+  .cask-input { font-size: 16px; }
   .chat-runtime { gap: 6px; }
   #chat-status { max-width: 100%; justify-content: flex-start; }
   .cs-cwd { max-width: min(42vw, 150px); }

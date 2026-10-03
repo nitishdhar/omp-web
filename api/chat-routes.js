@@ -6,6 +6,7 @@
 // GET  /api/sessions/:id/chat?from=<byte>  -> { transcript, items, derived }
 // POST /api/sessions/:id/chat              -> 202 { ok: true }
 // POST /api/sessions/:id/chat/keys         -> 202 { ok: true }
+// POST /api/sessions/:id/chat/answer       -> 202 { ok: true }  (rpc runner)
 
 const { execFile } = require("child_process");
 const config = require("../config");
@@ -250,6 +251,24 @@ async function handleChat(req, res, sub, url) {
       // Session metadata is current even before the destination profile emits
       // its first assistant/model record.
       derived.profile = sess.profile || "default";
+      derived.runner = sess.runner;
+      derived.ui = sess.ui;
+      // omp exits on every idle stop, runner switch and reload; omp-web caused
+      // each one, so it is not a conversation event. The next launch (or the
+      // TUI that just took over) resumes the same model, so keep presenting it
+      // unless omp is gone and the pane fell back to a shell.
+      if (sess.runner) {
+        for (let index = items.length - 1; index >= 0; index--) {
+          if (items[index].exit) items.splice(index, 1);
+        }
+        if (derived.exited && !derived.model && derived.lastRuntime && sess.status !== "shell") {
+          derived.model = derived.lastRuntime.model;
+          derived.modelAt = derived.lastRuntime.modelAt;
+          derived.provider = derived.lastRuntime.provider;
+          derived.effort = derived.lastRuntime.effort;
+        }
+      }
+      delete derived.lastRuntime;
       if (sess.runtimeActivity === "compaction") {
         derived.activity = {
           toolName: null,
@@ -307,6 +326,18 @@ async function handleChat(req, res, sub, url) {
       const body = await readJson(req, "EBADKEYS");
       await requireChatSession(id);
       await sessions.sendKeys(id, body.keys);
+      return sendJson(res, 202, { ok: true });
+    } catch (e) {
+      return sendError(res, e);
+    }
+  }
+
+  // --- POST /api/sessions/:id/chat/answer  { requestId, value|confirmed|cancelled }
+  if (req.method === "POST" && sub[3] === "answer" && sub.length === 4) {
+    try {
+      const body = await readJson(req, "EBADANSWER");
+      await requireChatSession(id);
+      await sessions.answer(id, body && typeof body === "object" ? body : {});
       return sendJson(res, 202, { ok: true });
     } catch (e) {
       return sendError(res, e);

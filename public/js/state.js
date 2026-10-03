@@ -19,6 +19,10 @@ export const state = {
   // Chat is the primary surface for agent sessions; Terminal is the
   // full-fidelity escape hatch. Only an explicit preference selects it.
   mode: localStorage.getItem("omp_web_mode") === "terminal" ? "terminal" : "chat",
+  // What is on screen. Usually `mode`, but shells force Terminal and Chat
+  // (rpc) sessions open in Chat without changing the stored preference.
+  // Set only by main.js applyMode().
+  view: null,
 };
 
 // Persist UI state that should survive a refresh. Session id is saved on
