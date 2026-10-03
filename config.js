@@ -7,8 +7,9 @@ const path = require("path");
 const HOME = os.homedir();
 
 // Optional local env overlay: OMP_WEB_HOME/env holds KEY=VALUE lines for
-// settings that are awkward to inject through a process manager (e.g.
-// transcription keys). An inherited environment always wins.
+// settings that are awkward to inject through a process manager (e.g. a
+// credential referenced by the `env` store). An inherited environment always
+// wins.
 const OWP_DIR = path.resolve(process.env.OMP_WEB_HOME || path.join(HOME, ".omp-web"));
 const OWP_ENV = path.join(OWP_DIR, "env");
 try {
@@ -83,13 +84,9 @@ const config = {
   // (api/install-links.js) points at a path that survives package upgrades.
   skillsDir: path.join(OWP_DIR, "skills"),
 
-  // Voice input transcription. The browser records audio and POSTs it to
-  // /api/transcribe; the server forwards it to this OpenAI-compatible
-  // /audio/transcriptions endpoint with the key below. The key never reaches
-  // the browser. Leave any value empty to disable the mic button.
-  transcribeBaseUrl: process.env.OMP_WEB_TRANSCRIBE_BASE_URL || "",
-  transcribeApiKey: process.env.OMP_WEB_TRANSCRIBE_API_KEY || "",
-  transcribeModel: process.env.OMP_WEB_TRANSCRIBE_MODEL || "",
+  // Credential values for the `file` store (api/credential-stores.js), 0600.
+  // Their names and metadata live in settings.json; values never do.
+  credentialsFile: path.join(OWP_DIR, "credentials.json"),
 
   // Dedicated tmux server so omp-web sessions never collide with the user's
   // normal tmux server.

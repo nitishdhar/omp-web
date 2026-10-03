@@ -25,10 +25,15 @@ function sendJson(res, code, obj) {
 function errorStatus(error) {
   const code = error && error.code;
   if (code === "EBODYTOOLARGE" || code === "EATTACHMENTTOOLARGE" || code === "EPAYLOADTOOLARGE" || code === "EVOICETOOLARGE") return 413;
-  if (code === "ENOSESSION" || code === "ENOTRANSCRIPT" || code === "ENOTFOUND") return 404;
+  if (code === "ENOSESSION" || code === "ENOTRANSCRIPT" || code === "ENOTFOUND" || code === "ENOCREDENTIAL") return 404;
   if (code === "EEXIST" || code === "ENOSESSIONFILE" || code === "ECONFLICT" || code === "EBUSY") return 409;
   // A setting fixed by the environment; Settings shows it read-only.
   if (code === "ELOCKED") return 409;
+  // A credential still referenced (EINUSE), or a credential store this
+  // process cannot use, e.g. the keychain from a background service.
+  if (code === "EINUSE" || code === "ESTOREUNAVAILABLE") return 409;
+  // The credential store itself failed; the message never carries the value.
+  if (code === "ECREDENTIALSTORE") return 502;
   if (code === "EUNSUPPORTEDATTACHMENT") return 415;
   if (code === "ENOTRANSCRIBER" || code === "EVOICEUPSTREAM" || code === "EVOICETIMEOUT" || code === "EMODELSUNAVAILABLE") return 503;
   // omp under the RPC runner could not be started or did not answer; or

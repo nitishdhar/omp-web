@@ -10,6 +10,7 @@ const { listModels, switchModel } = require("./models");
 const { handleChat } = require("./chat-routes");
 const { getGitStatus } = require("./git-status");
 const { transcribeVoice } = require("./transcribe");
+const { voiceReady } = require("./voice-settings");
 const { servePreviewFile } = require("./file-preview");
 const { publicPanels } = require("./panel-config");
 const { handleSettings } = require("./settings-routes");
@@ -63,7 +64,8 @@ async function handleApi(req, res, url) {
       profiles: listProfiles(),
       profileDetails: listProfileDetails(),
       folders: listFolders(),
-      transcribe: Boolean(config.transcribeBaseUrl && config.transcribeApiKey && config.transcribeModel),
+      // Voice is ready per Settings → Voice and its credential, read live.
+      transcribe: await voiceReady(),
       panels: publicPanels(),
     });
   }

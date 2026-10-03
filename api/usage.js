@@ -4,6 +4,7 @@ const { execFile } = require("child_process");
 const { promisify } = require("util");
 const config = require("../config");
 const { listProfiles } = require("./util");
+const { withOmpCredentials } = require("./omp-env");
 
 const execFileAsync = promisify(execFile);
 const CACHE_MS = 60_000;
@@ -209,7 +210,7 @@ async function collectProfile(profile) {
     : [`--profile=${profile}`, "usage", "--json", "--redact"];
   try {
     const { stdout } = await execFileAsync(config.ompBin, args, {
-      env: process.env,
+      env: await withOmpCredentials(process.env),
       timeout: 10_000,
       maxBuffer: 512 * 1024,
       windowsHide: true,

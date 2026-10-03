@@ -1,10 +1,10 @@
 "use strict";
 // Voice input: accept a short browser-recorded audio clip and forward it to an
-// OpenAI-compatible /audio/transcriptions endpoint. The provider key lives
-// only in server config and never reaches the browser. Audio is held in
-// memory, never written to disk.
+// OpenAI-compatible /audio/transcriptions endpoint. Endpoint, model and key
+// come from Settings → Voice (api/voice-settings.js) on every request; the key
+// never reaches the browser. Audio is held in memory, never written to disk.
 
-const config = require("../config");
+const { resolveVoice } = require("./voice-settings");
 const { multipartBoundary, readLimitedBody, parseMultipart } = require("./attachments");
 
 // Bound in-memory audio independently of the user's transcription provider.
@@ -36,9 +36,8 @@ function baseType(mime) {
 }
 
 async function transcribeVoice(req) {
-  if (!config.transcribeBaseUrl || !config.transcribeApiKey || !config.transcribeModel) {
-    throw voiceError("ENOTRANSCRIBER", "voice input is not configured");
-  }
+  const voice = await resolveVoice();
+  if (!voice.key) throw voiceError("ENOTRANSCRIBER", voice.problem);
   const boundary = multipartBoundary(req.headers["content-type"]);
   const body = await readLimitedBody(req);
   // Exactly one part: the parser rejects anything else, so whatever field
@@ -56,17 +55,17 @@ async function transcribeVoice(req) {
   }
 
   const forward = new FormData();
-  forward.set("model", config.transcribeModel);
+  forward.set("model", voice.model);
   forward.set("file", new Blob([clip.data], { type: mime || "audio/webm" }), "voice.webm");
 
-  const endpoint = config.transcribeBaseUrl.replace(/\/+$/, "") + "/audio/transcriptions";
+  const endpoint = voice.baseUrl.replace(/\/+$/, "") + "/audio/transcriptions";
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS);
   let upstream;
   try {
     upstream = await fetch(endpoint, {
       method: "POST",
-      headers: { authorization: `Bearer ${config.transcribeApiKey}` },
+      headers: { authorization: `Bearer ${voice.key}` },
       body: forward,
       signal: controller.signal,
     });

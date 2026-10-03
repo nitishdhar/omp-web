@@ -906,4 +906,7 @@ get("session:openTerminal", (id) => openTerminal(id));
 get("chat:answer", (answer) => chat.answerAsk(answer));
 get("meta:refreshed", renderSettings);
 get("meta:refreshed", () => panels.renderPanelNav());
+// Voice readiness lives in /api/meta; Settings → Voice and Credentials ask for
+// a meta refresh after a change, and the microphone follows without a reload.
+get("meta:refreshed", () => voice.setAvailable(Boolean(state.meta?.transcribe)));
 boot();

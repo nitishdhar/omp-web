@@ -12,7 +12,7 @@ const { promisify } = require("util");
 const config = require("../config");
 const sessions = require("../sessions");
 const { listProfiles } = require("./util");
-const { profileHome } = require("../transcripts");
+const { ompEnv } = require("./omp-version");
 
 const execFileAsync = promisify(execFile);
 const CACHE_MS = 10 * 60_000;
@@ -55,11 +55,8 @@ async function load(profile) {
   // Same profile selection as a session launch: an inherited OMP_PROFILE
   // made the "default" catalog list another profile's models, which the
   // default runtime then rejected as not found.
-  const env = { ...process.env, PI_CODING_AGENT_DIR: profileHome("default") };
-  delete env.OMP_PROFILE;
-  delete env.PI_PROFILE;
   const { stdout } = await execFileAsync(config.ompBin, args, {
-    env,
+    env: await ompEnv(),
     timeout: 15_000,
     maxBuffer: 4 * 1024 * 1024,
     windowsHide: true,

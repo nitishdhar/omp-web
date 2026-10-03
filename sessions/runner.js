@@ -9,6 +9,7 @@ const config = require("../config");
 const { profileSessionDirFor, sessionDirFor, bestResumeSource } = require("../transcripts");
 
 const BRIDGE = path.join(__dirname, "..", "bin", "rpc-bridge.js");
+const OMP_ENV_BIN = path.join(__dirname, "..", "bin", "omp-env.js");
 const RUN_DIR = path.join(config.ompWebHome, "run");
 // sockaddr_un.sun_path is 104 bytes on macOS, 108 on Linux.
 const MAX_SOCKET_PATH = 103;
@@ -35,7 +36,19 @@ function shellCommand(args) {
   return args.map(shellQuote).join(" ");
 }
 
-function recoverableAgentCommand(args, target) {
+// Keys passed to OMP enter the pane shell through `eval` of bin/omp-env.js's
+// stdout, so only variable names appear in the pane command (and so in ps and
+// tmux); the values exist only in the shell's and omp's environment. Names
+// are validated ^[A-Z_][A-Z0-9_]*$ by api/omp-env.js, safe unquoted.
+function ompEnvPrelude(names) {
+  if (!names.length) return "";
+  const resolver = shellCommand([
+    "/usr/bin/env", `OMP_WEB_HOME=${config.ompWebHome}`, process.execPath, OMP_ENV_BIN, ...names,
+  ]);
+  return `eval "$(${resolver} </dev/null)"; `;
+}
+
+function recoverableAgentCommand(args, target, envNames = []) {
   const markShell = shellCommand([
     config.tmuxBin, "-L", config.tmuxSocket,
     "set-option", "-t", target, "@omp_status", "shell",
@@ -47,7 +60,9 @@ function recoverableAgentCommand(args, target) {
   // Revoke Chat first, then discard bytes accepted during OMP's exit race
   // before an interactive shell can read from the shared pane PTY.
   const recover = `${markShell} && ${flushInput} && exec "\${SHELL:-/bin/zsh}" -l`;
-  const body = `${shellCommand(args)}; ${recover}; exec /usr/bin/tail -f /dev/null`;
+  // The fallback shell is interactive: drop the keys before it starts.
+  const unset = envNames.length ? `unset ${envNames.join(" ")}; ` : "";
+  const body = `${ompEnvPrelude(envNames)}${shellCommand(args)}; ${unset}${recover}; exec /usr/bin/tail -f /dev/null`;
   return `exec "\${SHELL:-/bin/zsh}" -lc ${shellQuote(body)}`;
 }
 
@@ -65,8 +80,8 @@ function holderPaneCommand() {
 // Login shell for the same reason as recoverableAgentCommand: omp and its
 // tools need the user's PATH. When the bridge exits (idle stop, stop op,
 // crash) the pane falls back to the holder, never to an interactive shell.
-function rpcPaneCommand(bridgeArgs) {
-  const body = `${shellCommand(bridgeArgs)}; ${holderBody()}`;
+function rpcPaneCommand(bridgeArgs, envNames = []) {
+  const body = `${ompEnvPrelude(envNames)}${shellCommand(bridgeArgs)}; ${holderBody()}`;
   return `exec "\${SHELL:-/bin/zsh}" -lc ${shellQuote(body)}`;
 }
 

@@ -16,6 +16,9 @@ import * as storageSection from "./storage.js";
 import * as ompSection from "./omp.js";
 import * as skillsSection from "./skills.js";
 import * as addressesSection from "./addresses.js";
+import * as voiceSection from "./voice.js";
+import * as credentialsSection from "./credentials.js";
+import * as ompEnvSection from "./omp-env.js";
 
 export { watchOmpUpdates } from "./omp.js";
 
@@ -23,6 +26,8 @@ const SECTIONS = {
   general: addressesSection,
   omp: ompSection,
   panels: panelsSection,
+  voice: voiceSection,
+  credentials: credentialsSection,
   sessions: sessionsSection,
   storage: storageSection,
   folders: { show: () => void loadPreviewRoots() },
@@ -98,6 +103,8 @@ export function wireSettings() {
   });
   wirePreviewRoots();
   panelsSection.wire();
+  voiceSection.wire();
+  ompEnvSection.wire();
   sessionsSection.wire();
   storageSection.wire();
   ompSection.wire();

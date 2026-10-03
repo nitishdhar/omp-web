@@ -95,15 +95,16 @@
 .set-root-remove:hover { color: var(--danger); }
 .set-root-form button { flex: none; min-height: 32px; padding: 0 12px; font-size: 12.5px; }
 .set-root-form { display: flex; gap: 6px; }
-.set-root-form input, .set-field input, .set-days {
+.set-root-form input, .set-field input, .set-field select, .set-days {
   min-width: 0; min-height: 32px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px;
   background: var(--panel-2); color: var(--text); font: 12px var(--font-mono);
 }
 .set-root-form input { flex: 1; }
-.set-root-form input:focus, .set-field input:focus, .set-days:focus {
+.set-root-form input:focus, .set-field input:focus, .set-field select:focus, .set-days:focus {
   outline: 0; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: var(--focus-ring);
 }
 .set-field input:disabled, .set-root-form input:disabled { color: var(--faint); cursor: not-allowed; }
+.set-field[hidden] { display: none; }
 .set-root-form button:disabled { opacity: .45; }
 
 .set-addresses { display: grid; gap: 6px; margin: 0 0 10px; padding: 0; list-style: none; }
@@ -179,6 +180,32 @@
 .set-panel-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .set-panel-form { padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel); }
 
+/* Voice + Credentials */
+.set-voice-state { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.set-voice-form .set-field input, .set-voice-form .set-field select { max-width: 520px; }
+.set-voice-new { margin: 4px 0 12px; }
+.set-voice-new[hidden] { display: none; }
+.set-voice-new .set-panel-form { background: var(--panel-2); }
+.set-error:empty { display: none; }
+.set-cred-meta { color: var(--muted); font: 11.5px var(--font-mono); overflow-wrap: anywhere; }
+.set-cred-edit { flex: 1 1 100%; padding-top: 10px; border-top: 1px solid var(--line); }
+.set-cred-form .set-field input, .set-cred-form .set-field select, .set-cred-edit .set-field input, .set-cred-edit .set-field select { width: 100%; max-width: 520px; }
+.set-badge.store-keychain { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent); }
+.set-cred-form .set-field + .set-note, .set-cred-edit .set-field + .set-note { margin: -4px 0 10px; }
+.set-omp-env { margin-top: 24px; }
+.set-omp-env-row { flex-wrap: wrap; gap: 2px 8px; padding: 4px 2px 4px 8px; }
+.set-omp-env-var { min-width: 0; color: var(--text); font: 11.5px var(--font-mono); overflow-wrap: anywhere; }
+.set-omp-env-arrow { flex: none; color: var(--faint); font-size: 12px; }
+.set-omp-env-cred { flex: 1 1 120px; min-width: 0; color: var(--muted); font-size: 12px; overflow-wrap: anywhere; }
+.set-omp-env-form { flex-wrap: wrap; }
+.set-omp-env-form input { flex: 1 1 200px; }
+.set-omp-env-form select {
+  flex: 1 1 180px; min-width: 0; max-width: 320px; min-height: 32px; padding: 5px 9px; border: 1px solid var(--line);
+  border-radius: 6px; background: var(--panel-2); color: var(--text); font: 12px var(--font-ui);
+}
+.set-omp-env-form select:focus { outline: 0; border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: var(--focus-ring); }
+.set-omp-env-form + .set-error { margin-top: 6px; }
+
 /* Sessions & memory: a role=table grid that folds to two lines on phones. */
 .set-table { display: grid; margin-bottom: 20px; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
 .set-tr {
@@ -253,10 +280,11 @@
   .set-body { padding: 16px 14px 40px; }
   .set-savebar { bottom: -40px; }
   .set-root-remove { width: 44px; height: 44px; }
-  .set-root-form input, .set-root-form button, .set-field input, .set-days, .set-btn,
+  .set-root-form input, .set-root-form button, .set-field input, .set-field select, .set-days, .set-btn,
   .set-savebar button, .set-row .icon-action { min-height: 44px; }
   .set-btn { min-width: 44px; }
-  .set-root-form input, .set-field input, .set-days { font-size: 16px; }
+  .set-root-form input, .set-field input, .set-field select, .set-days, .set-omp-env-form select { font-size: 16px; }
+  .set-omp-env-form select { min-height: 44px; max-width: none; }
   .set-check { min-height: 44px; }
   .set-check input[type="checkbox"], .set-storage-pick input { width: 20px; height: 20px; }
   .set-storage-nobox { width: 20px; }

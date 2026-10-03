@@ -45,6 +45,7 @@ const { handleArtifact } = require("./api/artifact-serve");
 const { migrateCustomDirectories } = require("./api/skills");
 const { ensureInstallLinks, logInstallLinks } = require("./api/install-links");
 const { recordBind } = require("./api/addresses");
+const { migrateVoiceFromEnv } = require("./api/voice-settings");
 
 const PUBLIC = path.join(__dirname, "public");
 const PUBLIC_REAL = fs.realpathSync(PUBLIC);
@@ -407,4 +408,5 @@ server.listen(config.port, config.host, () => {
   // by a service restart.
   logInstallLinks(ensureInstallLinks());
   void migrateCustomDirectories();
+  migrateVoiceFromEnv().catch((error) => console.error(`omp-web: voice settings migration failed (${error.message})`));
 });

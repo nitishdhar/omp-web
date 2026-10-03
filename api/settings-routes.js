@@ -8,6 +8,9 @@ const { getStats } = require("./stats");
 const { getStorage } = require("./storage-stats");
 const { skillsStatus, setSkillsInstalled } = require("./skills");
 const { addressesStatus, setAddresses } = require("./addresses");
+const { listCredentials, putCredential, deleteCredential } = require("./credentials");
+const { voiceSettings, setVoiceSettings, testVoice } = require("./voice-settings");
+const { ompEnvSettings, setOmpEnv } = require("./omp-env");
 
 async function jsonBody(req) {
   return JSON.parse((await readBody(req)) || "{}") || {};
@@ -17,6 +20,19 @@ async function jsonBody(req) {
 async function handleSettings(req, res, sub, url) {
   const route = `${req.method} ${sub.join("/")}`;
   try {
+    // settings/credentials/:name — the only parameterised settings route.
+    if (sub[0] === "settings" && sub[1] === "credentials" && sub.length === 3) {
+      const name = decodeURIComponent(sub[2]);
+      if (req.method === "PUT") {
+        sendJson(res, 200, await putCredential(name, await jsonBody(req)));
+        return true;
+      }
+      if (req.method === "DELETE") {
+        sendJson(res, 200, await deleteCredential(name));
+        return true;
+      }
+      return false;
+    }
     switch (route) {
       case "GET settings/preview-roots":
         sendJson(res, 200, { roots: listPreviewRoots() });
@@ -50,6 +66,24 @@ async function handleSettings(req, res, sub, url) {
         return true;
       case "PUT settings/addresses":
         sendJson(res, 200, await setAddresses(await jsonBody(req)));
+        return true;
+      case "GET settings/credentials":
+        sendJson(res, 200, await listCredentials());
+        return true;
+      case "GET settings/voice":
+        sendJson(res, 200, await voiceSettings());
+        return true;
+      case "PUT settings/voice":
+        sendJson(res, 200, await setVoiceSettings(await jsonBody(req)));
+        return true;
+      case "POST settings/voice/test":
+        sendJson(res, 200, await testVoice(await jsonBody(req)));
+        return true;
+      case "GET settings/omp-env":
+        sendJson(res, 200, await ompEnvSettings());
+        return true;
+      case "PUT settings/omp-env":
+        sendJson(res, 200, await setOmpEnv(await jsonBody(req)));
         return true;
       case "GET stats":
         sendJson(res, 200, await getStats());
