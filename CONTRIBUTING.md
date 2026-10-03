@@ -27,3 +27,6 @@ Shipped frontend files get a `?v=` bump in `public/index.html`, one per
 changed file, or browsers keep the stale asset. Backend changes
 (`server.js`, `api/`, `sessions.js`, `config.js`) need a server restart;
 `public/` files go live on reload.
+
+User-visible changes get a line under `## [Unreleased]` in `CHANGELOG.md`;
+a release renames that section to the new version and date.

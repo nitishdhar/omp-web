@@ -46,5 +46,24 @@ function installLinks() {
   }
 }
 
+// node-pty ships prebuilt binaries for macOS only; everywhere else its own
+// install step compiles it with node-gyp. A build that "succeeded" can still
+// fail to load (missing toolchain pieces, a Node ABI change), which otherwise
+// surfaces much later as every session failing to open. Report it here in one
+// line naming the tools (bin/omp-web.js doctor says the same), never failing
+// the install from this script.
+function checkNodePty() {
+  try {
+    require("node-pty");
+  } catch (error) {
+    const reason = String(error && error.message || error).split("\n")[0];
+    console.error(`omp-web: node-pty failed to load (${reason}) — it needs a C++ toolchain `
+      + "when no prebuilt binary fits: Linux build-essential and python3 (or your distro's "
+      + "equivalent), macOS Xcode Command Line Tools (`xcode-select --install`); install "
+      + "them, then rerun the install.");
+  }
+}
+
 fixSpawnHelpers();
+checkNodePty();
 installLinks();

@@ -48,7 +48,7 @@ carries the live terminal.
 
 ## Local installation boundary
 
-The distributable app is a single-user macOS companion to an independently
+The distributable app is a single-user companion for macOS and Linux to an independently
 installed OMP. Each user supplies their own subscriptions, native OMP profiles,
 workspace, and optional integrations. No provider accounts or profile templates
 are bundled. Native OMP owns provider login and model selection.
@@ -56,7 +56,8 @@ are bundled. Native OMP owns provider login and model selection.
 `omp-web setup` configures a new local installation without replacing existing
 configuration, tokens, profiles, or services. `omp-web doctor` checks local
 prerequisites; `omp-web start` runs the server in the foreground. The default
-listener is `127.0.0.1:7799`. Installation does not register a LaunchAgent.
+listener is `127.0.0.1:7799`. Installation does not register a service;
+`omp-web service install` does, explicitly (`bin/service-cli.js`).
 Installing (global postinstall), every server start and `omp-web setup` run
 `api/install-links.js`, which links `~/.agents/skills/omp-web-artifacts` and
 `~/.local/bin/omp-web` (opt out with `OMP_WEB_NO_INSTALL_LINKS=1`).
@@ -77,12 +78,13 @@ initialize profile files; checking prerequisites must not mutate user profiles.
 | File | Role |
 |---|---|
 | `server.js` | Node HTTP + WebSocket only: static shell serving, `/a` (artifacts, before auth), `/api` and `/panels` dispatch (delegated), `/ws` PTY bridge, process guards; on listen runs `ensureInstallLinks()` (logs only created/updated/problem items), the one-time `skills.customDirectories` cleanup and the one-time `OMP_WEB_TRANSCRIBE_*` → Settings → Voice migration. |
-| `bin/omp-web.js` | macOS/Linux CLI: foreground start, non-destructive local setup, prerequisite checks, and explicit handoff to native OMP profile onboarding. `doctor` treats Linux as warn-only; every later row validates what actually matters there; it reports both install links (ok / missing / dangling / points elsewhere / real file) and `~/.local/bin` missing from PATH, all as WARN at worst, and WARNs for each `OMP_WEB_TRANSCRIBE_*` still set (ignored since the move to Settings → Voice), naming `OMP_WEB_HOME/env` when it is there. `setup` runs `ensureInstallLinks()` and prints every item. `artifact ...` delegates to `bin/artifact-cli.js`; `addresses [--json]` to `bin/addresses-cli.js`; `credential ...` to `bin/credential-cli.js`. |
+| `bin/omp-web.js` | macOS/Linux CLI: foreground start, non-destructive local setup, prerequisite checks, and explicit handoff to native OMP profile onboarding. `doctor` treats Linux as warn-only; every later row validates what actually matters there. It FAILs on tmux older than 3.2 (`tmux -V` of `config.tmuxBin`, major.minor only, `next-` prefix accepted; an unparsable version WARNs), on any of `REQUIRED_OMP_FLAGS` (every flag `sessions.js` launches omp with, matched as a whole token in the bounded `omp --help`) missing, and on node-pty failing to load, naming the build toolchain. It reports both install links (ok / missing / dangling / points elsewhere / real file) and `~/.local/bin` missing from PATH, all as WARN at worst, and WARNs for each `OMP_WEB_TRANSCRIBE_*` still set (ignored since the move to Settings → Voice), naming `OMP_WEB_HOME/env` when it is there. `setup` runs `ensureInstallLinks()`, prints every item and, when the command link is managed but `~/.local/bin` is off PATH, the exact line for `$SHELL` (zsh `~/.zprofile`, bash `~/.bashrc` + `~/.profile`, fish `fish_add_path`, else `~/.profile`). `artifact ...` delegates to `bin/artifact-cli.js`; `addresses [--json]` to `bin/addresses-cli.js`; `credential ...` to `bin/credential-cli.js`; `service ...` to `bin/service-cli.js`. |
 | `bin/artifact-cli.js` | `omp-web artifact new <slug> --title T [--description D] [--project DIR] [--template list\|table\|cards\|blank]` (refuses an existing slug; copies `artifact-templates/<name>/`, stamps title/updatedAt into `data.json`, writes the manifest last; prints folder and link), `list [--json]`, `path`, `url` (absolute: `linkBase()` from `api/addresses.js` + cap path), `check` (`api/artifact-check.js`; exit 1 on errors), `touch` (manifest `updatedAt` = now). Reuses `config.js`, so `OMP_WEB_HOME` and its env overlay apply; never contacts the server, so links print while it is down. |
 | `bin/addresses-cli.js` | `omp-web addresses [--json]`: `addressesStatus()` from `api/addresses.js` as an aligned table (`*` marks the link address, unreachable rows name the bind) or the API's JSON shape. |
 | `bin/credential-cli.js` | `omp-web credential list [--json]` (no values), `set <name> [--label L] [--store file\|keychain]` (one line from stdin; refuses a TTY and an empty value), `import <name> --env VAR \| --file PATH [--key KEY]` (one-time copy from this process's environment, a whole trimmed file, or its `KEY=value` line), `rm <name>`. Uses `api/credentials.js` directly, so it works with the server down and the server sees changes on its next request. Runs in the caller's session, so Keychain works from a terminal; on macOS `--store keychain` always notes that a background-service server may not read it. |
+| `bin/service-cli.js` | `omp-web service install\|uninstall\|status [--label L] [--dry-run]`. macOS: `~/Library/LaunchAgents/<label>.plist` (default `com.omp-web.server`; no `LimitLoadToSessionType`, so it is an Aqua agent that reloads at login and can use the login keychain), `RunAtLoad` + `KeepAlive`, log `~/Library/Logs/omp-web.log` (`<label>.log` for other labels); loaded with `launchctl bootout` (if loaded) + `bootstrap gui/<uid>`; status parses `launchctl print`. Linux: `~/.config/systemd/user/<label>.service` (default `omp-web.service`), `KillMode=process`, `Restart=on-failure`, `WantedBy=default.target`; `daemon-reload`, `enable`, `restart`; status from `systemctl --user show`; prints the `loginctl enable-linger` hint while lingering is off. Both run absolute node + `bin/omp-web.js start` with a captured `PATH` (shell order, plus node/tmux/omp dirs) and `OMP_WEB_HOST/PORT/HOME/TMUX_SOCKET` when set; never the token. Install evaluates `config.js` under exactly that environment and refuses a tokenless non-loopback bind (the server's rule); install/status probe `GET /api/meta` (401 = up with token). `--dry-run` prints file + commands only; `OMP_WEB_SERVICE_PLATFORM=darwin\|linux` previews the other platform and is refused without `--dry-run`. Only the given label is ever touched. |
 | `bin/omp-env.js` | Pane-side resolver for Keys passed to OMP. Argv holds only variable names; it resolves them through `api/omp-env.js` and prints `export VAR='…'` lines for the pane shell to `eval`, so values never reach argv, tmux, history or files. Unresolvable variables are skipped with one stderr line each (shown in the pane). |
-| `bin/postinstall.js` | Repairs executable permissions on installed node-pty spawn helpers, including hoisted dependency layouts. On a global install only (`npm_config_global=true`; never `npm ci` in a checkout) it also runs `ensureInstallLinks()` and prints one line per item; nothing there can fail the install. |
+| `bin/postinstall.js` | Repairs executable permissions on installed node-pty spawn helpers, including hoisted dependency layouts, then loads node-pty and on failure prints one stderr line naming the build toolchain (node-pty ships prebuilds for macOS only; Linux always compiles it). On a global install only (`npm_config_global=true`; never `npm ci` in a checkout) it also runs `ensureInstallLinks()` and prints one line per item; neither the load check nor the links can fail the install. npm hides lifecycle output unless `--foreground-scripts`, so `doctor` repeats the node-pty diagnosis. |
 | `api/install-links.js` | What installing changes on the machine. `ensureInstallLinks()` → `[{item, ok, action: created\|updated\|unchanged\|skipped, detail}]`, never throws: (a) copies bundled `skills/<name>/` to `<OMP_WEB_HOME>/skills/<name>` (byte compare → unchanged; else temp copy + rename; only same-named folders replaced); (b) `~/.agents/skills/omp-web-artifacts` → `<OMP_WEB_HOME>/skills/artifacts`, replacing only a symlink (the name is ours); (c) `~/.local/bin/omp-web` → this install's realpath `bin/omp-web.js` (made executable), replacing only a missing or dangling link or one into some `.../bin/omp-web.js`. Real files/directories and foreign links are reported, never replaced; links swap via temp + rename. `OMP_WEB_NO_INSTALL_LINKS=1` skips (b) and (c). `inspectInstallLinks()` is the read-only doctor view; `skillLinkStatus()` feeds `GET /api/settings/skills` `link`. |
 | `api/artifact-store.js` | Artifacts on disk, shared by server, API and CLI: `<artifactsDir>/<slug>/` with slug `^[a-z0-9][a-z0-9-]{0,39}$` and `artifact.json` `{title ≤80, description? ≤280, project? absolute, entry? (default index.html), updatedAt? ISO}`; folders without a valid manifest are skipped. List items `{slug,title,description,project,updatedAt (max of manifest and newest file mtime, epoch ms),bytes,files,url}` sorted newest first; the walk never follows symlinks. Owns the capability key and `cap(slug)`, and the served-path rules: no dot segments, realpath inside the folder (and not on a dotfile), extension allowlist with Content-Type, regular files only. |
 | `api/artifact-serve.js` | `GET\|HEAD /a/<cap>/<slug>/<path>`: segments are split before decoding; bad cap, unknown slug, invalid manifest or refused path → the same `404`; `/a/<cap>/<slug>` → `308` to the trailing slash (relative URLs keep the cap); `/` → manifest entry. Every response carries the sandbox CSP, `Access-Control-Allow-Origin: *` (the page's own fetches are cross-origin from its opaque origin), `nosniff`, `no-referrer`, `no-cache`; files get an ETag (size+mtime) with `304`. Never sets cookies. |
@@ -622,18 +624,19 @@ Transport bounds checklist (every number enforced in code, not advisory):
   bounded list of ids the operator explicitly dismissed. The registry never
   auto-resurrects sessions and is never read for live behavior; tmux stays
   truth.
-- A Mac reboot or `tmux -L omp-web kill-server` therefore destroys live
+- A host reboot or `tmux -L omp-web kill-server` therefore destroys live
   sessions **unrecoverably by design**: the OMP processes, their panes, and
   every `@omp_*` pin vanish together. Owned JSONL transcripts under
   `OMP_WEB_SESSIONS_DIR` (default `~/.omp/web-sessions/<id>/`) survive on disk
   and remain readable history, but they can never be reattached — a recreated
   session is a new session that may resume the same transcript directory.
 - A process supervisor keeps the **node server** alive, not the tmux server.
-  On macOS a user LaunchAgent with `KeepAlive` + `RunAtLoad` that runs
-  `node <checkout>/server.js` and logs to `~/Library/Logs/omp-web.log` works
-  well. Restarting that service (for example `launchctl kickstart -k
-  gui/$(id -u)/<label>`) preserves tmux sessions because the tmux server is a
-  separate process tree; only the death of the tmux server itself loses them.
+  `omp-web service install` writes one: a default-session (Aqua) LaunchAgent
+  with `KeepAlive` + `RunAtLoad` on macOS, a systemd user unit with
+  `KillMode=process` on Linux. Restarting it (for example `launchctl
+  kickstart -k gui/$(id -u)/<label>`) preserves tmux sessions because the tmux
+  server daemonizes out of the job's process group and the unit's kill set;
+  only the death of the tmux server itself loses them.
   Static files apply on next request; server-side changes need a restart.
 - `sessions.js bootstrap()` keeps the server configured where possible
   (`exit-empty off`, `window-size latest`, `default-command exec $SHELL -l`,
@@ -745,7 +748,7 @@ Transport bounds checklist (every number enforced in code, not advisory):
 | `OMP_WEB_PROFILES_DIR` | `~/.omp/profiles` | Profile picker source. |
 | `OMP_WEB_SESSIONS_DIR` | `<OMP_WEB_OMP_HOME>/web-sessions` | Per-session OMP transcript directory. |
 | `OMP_WEB_ATTACHMENTS_DIR` | `~/.omp-web/attachments` | Private, session-scoped attachment storage. |
-| `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable. |
+| `OMP_WEB_TMUX_BIN` | first available of `/opt/homebrew/bin/tmux`, `/usr/local/bin/tmux`, `/usr/bin/tmux`, then `tmux` | tmux executable, 3.2 or newer (`terminal-features`). The fixed paths win over PATH, so a newer tmux elsewhere needs this set. |
 | `OMP_WEB_TMUX_SOCKET` | `omp-web` | Dedicated tmux server label. |
 | `OMP_WEB_RPC_IDLE_MINUTES` | `10` | Settled, idle minutes before a Chat (rpc) session's omp exits; fractions allowed. Settings can set it (1–1440, `settings.json` `runtime.rpcIdleMinutes`) unless this variable is set, which wins and locks it. |
 | `OMP_WEB_TUI_IDLE_MINUTES` | `30` | Quiet minutes before the reaper hands an unattached TUI back to rpc; fractions allowed. Settings can set it (5–1440, `runtime.tuiIdleMinutes`) unless this variable is set, which wins and locks it. |
@@ -758,6 +761,11 @@ Transport bounds checklist (every number enforced in code, not advisory):
 
 - **node-pty prebuilt `spawn-helper` loses its exec bit on install** ->
   `posix_spawnp failed`. A `postinstall` hook `chmod +x`es it.
+- **node-pty ships prebuilds for macOS (and Windows) only** -> every Linux
+  install compiles it with node-gyp and needs `build-essential`/`python3` (or
+  the distro equivalent); without them `npm` fails before omp-web's own
+  scripts run. A build that loads wrongly is caught by `postinstall` and
+  `doctor`, both naming the toolchain.
 - **launchd has a thin env**: must inject PATH (Homebrew) and a **UTF-8 locale**
   -- without a locale, tmux mangles its tab-separated `-F` output (broke session
   parsing) and omp loses Unicode rendering.
